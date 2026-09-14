@@ -7,6 +7,13 @@
 
 [🇬🇧 Switch to English Documentation](README.md)
 
+<p align="center">
+  <img src="preview_dashboard.png" alt="CachyOS Control Center Cockpit" width="900">
+</p>
+<p align="center">
+  <img src="preview_interfaces.png" alt="CachyOS Control Center Netzwerk & Schnittstellen" width="900">
+</p>
+
 Das hochperformante, modulare Terminal-Kontrollzentrum (TUI) und Systemadministrations-Toolkit für **CachyOS / Arch Linux (KDE Plasma 6 Wayland)**.
 
 Entwickelt nach strikten Architekturprinzipien:

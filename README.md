@@ -7,6 +7,13 @@
 
 [🇩🇪 Zur deutschen Dokumentation wechseln](README_DE.md)
 
+<p align="center">
+  <img src="preview_dashboard.png" alt="CachyOS Control Center Cockpit" width="900">
+</p>
+<p align="center">
+  <img src="preview_interfaces.png" alt="CachyOS Control Center Network & Interfaces" width="900">
+</p>
+
 A high-performance, modular Terminal User Interface (TUI) and administration suite built specifically for **CachyOS / Arch Linux (KDE Plasma 6 Wayland)**.
 
 Engineered under strict architectural tenets:
