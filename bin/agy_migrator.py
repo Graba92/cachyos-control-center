@@ -501,7 +501,7 @@ def execute_migration(cli_source: str = None, cli_target: str = None, cli_inplac
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="AGY-ARCHITECT — Directory Synthesizer")
-    parser.add_argument("--source", "-s", help="Quellverzeichnis (z. B. /home/graba/Schreibtisch/ASGRAD)")
+    parser.add_argument("--source", "-s", help="Quellverzeichnis (z. B. ~/projects oder /pfad/zum/ordner)")
     parser.add_argument("--target", "-t", help="Zielverzeichnis")
     parser.add_argument("--inplace", "-i", action="store_true", help="In-Place-Migration im Quellverzeichnis")
     parser.add_argument("--yes", "-y", action="store_true", help="Bestätigung automatisch akzeptieren")

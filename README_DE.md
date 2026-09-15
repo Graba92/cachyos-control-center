@@ -1,11 +1,12 @@
+[🇩🇪 Zur deutschen Dokumentation wechseln](README_DE.md) | [🇬🇧 Switch to English Documentation](README.md)
+
 # ⚡ CachyOS Control Center & System Architect (Masterpiece Edition)
 
+[![GitHub](https://img.shields.io/badge/GitHub-Graba92%2Fcachyos--control--center-blue?logo=github)](https://github.com/Graba92/cachyos-control-center)
 [![Platform](https://img.shields.io/badge/Platform-Arch%20Linux%20%7C%20CachyOS-1793d1.svg?style=flat&logo=archlinux)](https://cachyos.org)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg?logo=python)](https://python.org)
 [![TUI](https://img.shields.io/badge/UI-Textual-green.svg)](https://textual.textualize.io)
 [![License](https://img.shields.io/badge/License-MIT-purple.svg)](LICENSE)
-
-[🇬🇧 Switch to English Documentation](README.md)
 
 <p align="center">
   <img src="preview_dashboard.png" alt="CachyOS Control Center Cockpit" width="900">

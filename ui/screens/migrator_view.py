@@ -55,7 +55,7 @@ class MigratorView(Container):
             # Rechte Spalte: Scan & Migration
             with Vertical(classes="col-half"):
                 yield Label("QUELLVERZEICHNIS FÜR SYNTHESE WÄHLEN", classes="title")
-                yield Input(value="/home/graba/Schreibtisch/ASGRAD", id="migrator_src_input")
+                yield Input(value=str(Path.home()), id="migrator_src_input")
                 with Horizontal(classes="toolbar"):
                     yield Button("[A] Quellordner analysieren", id="btn_migrator_scan", classes="-primary")
                     yield Button("[T] CLI-Migrator im Terminal", id="btn_migrator_cli", classes="-warning")

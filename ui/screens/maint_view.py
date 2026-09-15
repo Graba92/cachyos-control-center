@@ -85,8 +85,12 @@ class MaintView(Container):
 
     def launch_terminal_script(self, script_name: str) -> bool:
         """Startet ein externes Wartungsskript in einem separaten Terminal."""
-        bash_dir = Path("/home/graba/Schreibtisch/ASGRAD/Valhalla/TOOLS/BASH")
-        target = bash_dir / script_name
+        local_bin = Path(__file__).resolve().parent.parent.parent / "bin"
+        user_scripts = Path.home() / ".local" / "bin"
+        
+        target = local_bin / script_name
+        if not target.exists():
+            target = user_scripts / script_name
         if not target.exists():
             return False
 
