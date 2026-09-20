@@ -80,12 +80,6 @@ from .maintenance import (
     get_orphan_packages,
     get_pacman_cache_size,
 )
-from .ricing import (
-    inspect_desktop_environment,
-    get_fastfetch_output,
-    RICE_KNOWLEDGE_BASE,
-    DesktopInspectorResult,
-)
 
 __all__ = [
     "run_cmd",
@@ -155,8 +149,4 @@ __all__ = [
     "check_available_updates",
     "get_orphan_packages",
     "get_pacman_cache_size",
-    "inspect_desktop_environment",
-    "get_fastfetch_output",
-    "RICE_KNOWLEDGE_BASE",
-    "DesktopInspectorResult",
 ]

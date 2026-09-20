@@ -50,7 +50,7 @@ Footer {
     margin-right: 2;
 }
 
-/* ── Tabbed Navigation (Volle Breite) ─────────────────────────────────────── */
+/* ── Tabbed Navigation (Volle Breite & Perfekter Kontrast) ───────────────── */
 TabbedContent {
     height: 1fr;
     background: #11111b;
@@ -62,6 +62,14 @@ Tabs {
     height: 3;
 }
 
+Tabs .underline--bar {
+    background: #89b4fa;
+}
+
+Tabs:focus .underline--bar {
+    background: #00f2fe;
+}
+
 Tab {
     background: #181825;
     color: #a6adc8;
@@ -70,8 +78,8 @@ Tab {
 }
 
 Tab:hover {
-    color: #cdd6f4;
-    background: #1e1e2e;
+    color: #ffffff;
+    background: #313244;
 }
 
 Tab.-active {
@@ -79,6 +87,16 @@ Tab.-active {
     color: #89b4fa;
     text-style: bold;
     border-bottom: wide #89b4fa;
+}
+
+/* Verhindert Textual-Block-Cursor Farbverzerrung bei Fokus */
+Tabs:focus Tab.-active,
+Tab.-active:focus,
+Tab:focus {
+    background: #313244;
+    color: #ffffff;
+    text-style: bold;
+    border-bottom: wide #00f2fe;
 }
 
 TabPane {

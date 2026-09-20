@@ -6,6 +6,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.0.1] - 2026-09-20 (Contrast Fix, Layout Streamlining & Visual Polish)
+
+### 🎨 Fixed & Improved
+- **Tabbed Navigation Contrast:** Resolved active/focused tab font readability issue where Textual default block-cursor theme inverted text to unreadable dark contrast. Active tabs now glow in high-contrast bold `#ffffff` on `#313244` / `#89b4fa` with an active cyan `#00f2fe` indicator line.
+- **Removed Ricing Tab:** Completely purged obsolete ricing tab and Fastfetch inspector, focusing the Control Center purely on system administration, kernel management, power profiles, and diagnostics.
+- **Multi-Screen Visual Assets:** Added high-resolution screenshots for Cockpit (`preview_dashboard.png`), Kernel Matrix (`preview_kernel.png`), Hardware Power Profiles (`preview_power.png`), System Maintenance (`preview_maintenance.png`), and Network Interfaces (`preview_interfaces.png`).
+- **Thermal Throttle Threshold:** Adjusted passive ACPI trip point logic to ignore uninitialized negative raw sensor values (`-274°C`), preventing spurious thermal throttling alerts.
+
+---
+
 ## [1.0.0] - 2026-09-20 (Unified Architecture & Modularization)
 
 ### 🌟 Added

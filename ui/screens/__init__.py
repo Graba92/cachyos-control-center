@@ -16,8 +16,6 @@ from .services_view import ServicesView
 from .diag_view import DiagView
 from .wifi_view import WifiView
 from .tailscale_view import TailscaleView
-from .rice_view import RiceView
-from .migrator_view import MigratorView
 
 __all__ = [
     "DashboardView",
@@ -28,6 +26,4 @@ __all__ = [
     "DiagView",
     "WifiView",
     "TailscaleView",
-    "RiceView",
-    "MigratorView",
 ]

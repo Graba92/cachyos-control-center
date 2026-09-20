@@ -7,13 +7,22 @@
 [![Python](https://img.shields.io/badge/Python-3.11%2B-blue.svg?logo=python)](https://python.org)
 [![TUI](https://img.shields.io/badge/UI-Textual%208.2%2B-green.svg)](https://textual.textualize.io)
 [![License](https://img.shields.io/badge/License-MIT-purple.svg)](LICENSE)
-[![Release](https://img.shields.io/badge/Version-v1.0.0-emerald.svg)](CHANGELOG.md)
+[![Release](https://img.shields.io/badge/Version-v1.0.1-emerald.svg)](CHANGELOG.md)
 
 <p align="center">
   <img src="preview_dashboard.png" alt="CachyOS Control Center Cockpit" width="900">
 </p>
 <p align="center">
-  <img src="preview_interfaces.png" alt="CachyOS Control Center Network & Interfaces" width="900">
+  <img src="preview_kernel.png" alt="CachyOS Kernel- & Treibermatrix" width="900">
+</p>
+<p align="center">
+  <img src="preview_power.png" alt="Hardware- & Power-Profile" width="900">
+</p>
+<p align="center">
+  <img src="preview_maintenance.png" alt="Systemwartung & Mirrors" width="900">
+</p>
+<p align="center">
+  <img src="preview_interfaces.png" alt="Netzwerk & Schnittstellen" width="900">
 </p>
 
 Ein hochperformantes, modulares Terminal User Interface (TUI) Dashboard und Headless-Automatisierungswerkzeug, maßgeschneidert für **CachyOS und Arch Linux**.
@@ -55,6 +64,7 @@ Ein hochperformantes, modulares Terminal User Interface (TUI) Dashboard und Head
 ### 6. 🌐 Zweisprachige Lokalisierung (i18n) & Privileg-Isolation
 - **Zweisprachig:** Vollständige Unterstützung für Deutsch (`de_DE`) und Englisch (`en_US`). Jederzeit zur Laufzeit umschaltbar mit Taste `L`.
 - **Strikte Privileg-Isolation:** Die TUI läuft unprivilegiert als regulärer Benutzer. Root-Aktionen werden isoliert via Polkit (`org.cachyos.controlcenter.policy`) ausgeführt.
+- **Hochkontrast-Typografie:** Optimiertes TCSS Tabs-Styling mit scharfem Kontrast zur Verhinderung von Farbverwaschungen bei fokussierten Tabs.
 - **XDG-Standard:** Konfigurationsspeicherung unter `~/.config/cachyos-control-center/config.toml` bzw. `/etc/cachyos-control-center/config.toml`.
 
 ---
@@ -64,13 +74,13 @@ Ein hochperformantes, modulares Terminal User Interface (TUI) Dashboard und Head
 ```text
 cachyos-control-center/
 ├── app.py                             # Universeller CLI- & TUI-Einstiegspunkt
-├── cachyos_center.py                  # Textual TUI Master Application
+├── cachyos_center.py                  # Textual TUI Master Application (7 Tabs)
 ├── setup.sh                           # Automatischer Installationsprüfer
 ├── run.sh                             # 1-Klick Starter
 ├── PKGBUILD                           # Arch/CachyOS PKGBUILD Paketmanifest
 ├── config.example.toml                # XDG-Konfigurationsvorlage
 ├── requirements.txt                   # Python-Abhängigkeiten (textual, rich)
-├── CHANGELOG.md                       # Release-Notes (v1.0.0)
+├── CHANGELOG.md                       # Release-Notes (v1.0.1)
 │
 ├── core/                              # System- & Geschäftslogik
 │   ├── i18n.py                        # Zweisprachige Übersetzungs-Engine (DE / EN)
@@ -82,8 +92,7 @@ cachyos-control-center/
 │   ├── system.py                      # Hardware-Telemetrie & Systemd-Auditor
 │   ├── diagnostics.py                 # Boot-Parameter, Logs & JSON-Audit-Engine
 │   ├── network.py                     # WLAN-Schnittstellen & AP-Scanner
-│   ├── tailscale.py                   # Tailscale Mesh-Topologie & Routing
-│   └── ricing.py                      # Fastfetch & Desktop-Inspektor
+│   └── tailscale.py                   # Tailscale Mesh-Topologie & Routing
 │
 ├── ui/                                # Textual Benutzeroberfläche
 │   ├── theme.py                       # Catppuccin Mocha / CachyOS Emerald Stylesheet
@@ -95,8 +104,7 @@ cachyos-control-center/
 │       ├── services_view.py           # Systemd Dienste-Steuerung
 │       ├── diag_view.py               # Boot-Cmdline, Kernel-Logs & Analyse
 │       ├── wifi_view.py               # WLAN-Schnittstellenprüfung
-│       ├── tailscale_view.py          # WireGuard Mesh-Status
-│       └── rice_view.py               # Desktop Ricing Inspektor
+│       └── tailscale_view.py          # WireGuard Mesh-Status
 │
 ├── data/                              # Desktop- & Sicherheitsdateien
 │   ├── org.cachyos.controlcenter.policy  # Polkit-Regeln
@@ -105,8 +113,7 @@ cachyos-control-center/
 │
 └── bin/                               # Standalone Hilfswerkzeuge
     ├── net_diagnose.py                # Standalone Netzwerkdiagnose
-    ├── agy_migrator.py                # Verzeichnis-Synthesizer
-    └── cachyos_rice_toolkit.py        # Interaktives Ricing-Toolkit
+    └── agy_migrator.py                # Verzeichnis-Synthesizer
 ```
 
 ---
@@ -175,7 +182,6 @@ chmod +x setup.sh run.sh
 | `5` | **Dienste:** Systemd Diensteverwaltung |
 | `6` | **Diagnose:** Boot-Parameter, Kernel-Logs & Hardware-Snapshot |
 | `7` | **Netzwerk:** WLAN & Tailscale Mesh |
-| `8` | **Ricing:** Fastfetch & Desktop-Inspektor |
 | `L` | **Sprachwechsel:** Dynamisch zwischen Deutsch und Englisch wechseln |
 | `R` | **Aktualisieren:** Telemetrie und Daten des aktiven Tabs neu laden |
 | `Q` | **Beenden:** Control Center schließen |

@@ -75,8 +75,6 @@ from core.maintenance import (
 )
 from core.polkit import polkit_service_action, is_pacman_locked
 from core.diagnostics import run_diagnostic_profile
-from core.ricing import get_fastfetch_output
-
 from ui.theme import APP_TCSS
 from ui.screens.dashboard_view import DashboardView
 from ui.screens.kernel_view import KernelView
@@ -86,8 +84,6 @@ from ui.screens.services_view import ServicesView
 from ui.screens.diag_view import DiagView
 from ui.screens.wifi_view import WifiView
 from ui.screens.tailscale_view import TailscaleView
-from ui.screens.rice_view import RiceView
-from ui.screens.migrator_view import MigratorView
 
 
 class CachyOSCenterApp(App):
@@ -104,7 +100,6 @@ class CachyOSCenterApp(App):
         Binding("5", "switch_tab('tab_services')", "5. Dienste"),
         Binding("6", "switch_tab('tab_diag')", "6. Diagnose"),
         Binding("7", "switch_tab('tab_network')", "7. Netzwerk"),
-        Binding("8", "switch_tab('tab_rice')", "8. Ricing"),
         Binding("r", "refresh_active()", "Aktualisieren"),
         Binding("l", "toggle_lang()", "Sprache (DE/EN)"),
         Binding("q", "quit", "Beenden"),
@@ -154,9 +149,6 @@ class CachyOSCenterApp(App):
 
             with TabPane(t("tab_network"), id="tab_network"):
                 yield WifiView(id="view_wifi")
-
-            with TabPane("8. Ricing", id="tab_rice"):
-                yield RiceView(id="view_rice")
 
         yield Footer()
 
