@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD polkit Policy Configuration 1.0//EN"
+"http://www.freedesktop.org/software/polkit/policyconfig-1.dtd">
+<policyconfig>
+
+  <vendor>CachyOS Control Center</vendor>
+  <vendor_url>https://github.com/Graba92/cachyos-control-center</vendor_url>
+  <icon_name>cachyos-control-center</icon_name>
+
+  <action id="org.cachyos.controlcenter.system-maintenance">
+    <description>Perform CachyOS system maintenance and cache cleaning</description>
+    <description xml:lang="de">CachyOS Systemhygiene und Paketcache-Bereinigung durchführen</description>
+    <message>Authentication is required to perform system maintenance and cache cleanup</message>
+    <message xml:lang="de">Authentifizierung erforderlich, um die Systemhygiene durchzuführen</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.cachyos.controlcenter.mirror-benchmark">
+    <description>Benchmark and update CachyOS package mirrors</description>
+    <description xml:lang="de">CachyOS Paket-Spiegelserver messen und aktualisieren</description>
+    <message>Authentication is required to benchmark and update system mirrorlists</message>
+    <message xml:lang="de">Authentifizierung erforderlich, um Spiegelserver-Listen zu aktualisieren</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.cachyos.controlcenter.power-profiles">
+    <description>Modify CPU frequency governor and energy performance preferences</description>
+    <description xml:lang="de">CPU-Frequenz-Governor und Energiepräferenzen anpassen</description>
+    <message>Authentication is required to adjust CPU scaling governors and power profiles</message>
+    <message xml:lang="de">Authentifizierung erforderlich, um CPU-Governors und Energieprofile zu ändern</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.cachyos.controlcenter.service-control">
+    <description>Manage systemd services and daemons</description>
+    <description xml:lang="de">Systemd-Dienste und Hintergrundprozesse steuern</description>
+    <message>Authentication is required to start, stop, enable, or disable system services</message>
+    <message xml:lang="de">Authentifizierung erforderlich, um Systemdienste zu steuern</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.cachyos.controlcenter.kernel-manage">
+    <description>Install or remove CachyOS kernel packages</description>
+    <description xml:lang="de">CachyOS Kernel-Pakete installieren oder deinstallieren</description>
+    <message>Authentication is required to manage CachyOS Linux kernel packages</message>
+    <message xml:lang="de">Authentifizierung erforderlich, um Kernel-Pakete zu verwalten</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+  </action>
+
+</policyconfig>

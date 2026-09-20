@@ -4,7 +4,7 @@
 """
 ===============================================================================
  CachyOS Control Center — Dashboard (System-Cockpit)
- Reine Status-, Hardware- und Telemetrieübersicht ohne Funktionsduplikate
+ KPI-Karten, Telemetrieübersicht, aktiver Kernel & administrative Schnellaktionen
 ===============================================================================
 """
 
@@ -15,15 +15,11 @@ from textual.app import ComposeResult
 from textual.containers import Container, Horizontal, Vertical
 from textual.widgets import Button, DataTable, Label, Static
 
-from core.system import (
-    get_system_telemetry,
-    get_services_status,
-    SystemTelemetry,
-    ServiceStatus,
-    run_cmd,
-)
-from core.maintenance import find_pacnew_files
-from core.tailscale import get_tailscale_status
+from core.system import get_system_telemetry, SystemTelemetry
+from core.kernel_driver import get_running_kernel
+from core.maintenance import clean_pacman_cache, remove_orphan_packages, run_fstrim, reset_failed_units, benchmark_mirrors
+from core.polkit import is_pacman_locked
+from core.i18n import t
 
 
 def _render_bar(percent: float, width: int = 14) -> str:
@@ -48,107 +44,122 @@ class DashboardView(Container):
         # Top KPI-Karten
         with Horizontal(classes="cards-row"):
             with Vertical(classes="kpi-card"):
-                yield Label("PROZESSOR (CPU)", classes="kpi-title")
+                yield Label(t("kpi_cpu_title"), id="kpi_title_cpu", classes="kpi-title")
                 yield Static("-- %", id="dash_kpi_cpu_val", classes="kpi-value")
                 yield Static("-- Kerne", id="dash_kpi_cpu_sub", classes="kpi-sub")
 
             with Vertical(classes="kpi-card"):
-                yield Label("ARBEITSSPEICHER (RAM)", classes="kpi-title")
+                yield Label(t("kpi_ram_title"), id="kpi_title_ram", classes="kpi-title")
                 yield Static("-- GB", id="dash_kpi_ram_val", classes="kpi-value")
                 yield Static("-- % belegt", id="dash_kpi_ram_sub", classes="kpi-sub")
 
             with Vertical(classes="kpi-card"):
-                yield Label("ROOT-DATEISYSTEM (/)", classes="kpi-title")
+                yield Label(t("kpi_disk_title"), id="kpi_title_disk", classes="kpi-title")
                 yield Static("-- GB", id="dash_kpi_disk_val", classes="kpi-value")
-                yield Static("BTRFS", id="dash_kpi_disk_sub", classes="kpi-sub")
+                yield Static("-- % belegt", id="dash_kpi_disk_sub", classes="kpi-sub")
 
             with Vertical(classes="kpi-card"):
-                yield Label("SYSTEM-IDENTITÄT", classes="kpi-title")
-                yield Static("CachyOS Linux", id="dash_kpi_os_val", classes="kpi-value")
-                yield Static("Uptime: --", id="dash_kpi_os_sub", classes="kpi-sub")
+                yield Label(t("kpi_kernel_title"), id="kpi_title_kernel", classes="kpi-title")
+                yield Static("--", id="dash_kpi_kernel_val", classes="kpi-value")
+                yield Static("CachyOS Linux", id="dash_kpi_kernel_sub", classes="kpi-sub")
 
-        # Hauptbereich: Split Layout
+            with Vertical(classes="kpi-card"):
+                yield Label(t("kpi_health_title"), id="kpi_title_health", classes="kpi-title")
+                yield Static("HEALTHY", id="dash_kpi_health_val", classes="kpi-value")
+                yield Static("0 Failed Units", id="dash_kpi_health_sub", classes="kpi-sub")
+
+        # Hauptbereich: Split Horizontal
         with Horizontal(classes="split-h"):
-            # Linke Spalte: Services-Matrix
-            with Vertical(classes="col-left"):
-                yield Label("🔒 STATUS DER SYSTEMD-KERN-DIENSTE", classes="section-label")
-                yield DataTable(id="dash_services_table", cursor_type="row")
+            # Linke Spalte: Detaillierte Telemetrie & Hostinfo
+            with Vertical(classes="col-left panel"):
+                yield Label(f"🖥️  {t('telemetry_details')}", classes="panel-title")
+                yield Static("", id="dash_telemetry_box", classes="term-box")
+                yield Static("", id="dash_pacman_warn", classes="alert-warn")
 
-            # Rechte Spalte: Systemintegrität & Aktionen
-            with Vertical(classes="col-right"):
-                yield Label("🛡️ SYSTEM-INTEGRITÄT & NETZWERK-AUDIT", classes="section-label")
-                yield Static("Ermittle Systemzustand...", id="dash_combined_status_box", classes="info-box")
+            # Rechte Spalte: Schnellaktionen
+            with Vertical(classes="col-right panel"):
+                yield Label(f"⚡  {t('quick_actions')}", classes="panel-title")
+                yield Static("Führt administrative Wartungsaufgaben sicher mit Polkit-Isolation aus:", classes="text-muted")
+                
+                with Vertical(classes="control-box"):
+                    yield Button(f"🧹  {t('action_cache_clean')}", id="btn_quick_clean_cache", classes="-primary")
+                    yield Button(f"🗑️  {t('action_orphan_remove')}", id="btn_quick_remove_orphans")
+                    yield Button(f"🚀  {t('action_rate_mirrors')}", id="btn_quick_rate_mirrors")
+                    yield Button(f"💾  {t('action_trim')}", id="btn_quick_trim")
+                    yield Button(f"🔄  {t('action_reset_failed')}", id="btn_quick_reset_failed")
 
-                yield Label("⚡ COCKPIT-SOFORTAKTIONEN", classes="section-label")
-                with Vertical(classes="panel"):
-                    yield Button("[D] Schnelldiagnose ausführen", id="btn_quick_diag", classes="-primary")
-                    yield Button("[C] Pacman Cache leeren (paccache)", id="btn_quick_cache", classes="-warning")
-                    yield Button("[J] Journal-Logs trimmen (50M)", id="btn_quick_journal", classes="-warning")
-                    yield Button("[R] Fehlgeschlagene Units resetten", id="btn_quick_reset_units", classes="-error")
-                    yield Button("[A] Telemetrie aktualisieren", id="btn_dash_refresh", classes="-default")
+                yield Static("", id="dash_action_status", classes="term-box")
 
     def on_mount(self) -> None:
-        table = self.query_one("#dash_services_table", DataTable)
-        table.add_columns("Dienst", "Status", "Substate", "Starttyp")
-        self.refresh_dashboard()
+        self.refresh_telemetry()
 
-    def refresh_dashboard(self) -> None:
-        t = get_system_telemetry()
+    def refresh_telemetry(self) -> None:
+        t_data = get_system_telemetry()
+        running_kernel = get_running_kernel()
 
-        # 1. Update KPI-Gauges
-        self.query_one("#dash_kpi_cpu_val", Static).update(_render_bar(t.cpu_percent))
-        self.query_one("#dash_kpi_cpu_sub", Static).update(f"{t.cpu_cores} Kerne aktiv │ Last stabil")
+        # Update KPIs
+        self.query_one("#dash_kpi_cpu_val", Static).update(f"{t_data.cpu_percent}%")
+        self.query_one("#dash_kpi_cpu_sub", Static).update(t("kpi_cores", cores=t_data.cpu_cores))
 
-        self.query_one("#dash_kpi_ram_val", Static).update(_render_bar(t.ram_percent))
-        self.query_one("#dash_kpi_ram_sub", Static).update(f"{t.ram_used_gb} GB von {t.ram_total_gb} GB")
+        self.query_one("#dash_kpi_ram_val", Static).update(f"{t_data.ram_used_gb} / {t_data.ram_total_gb} GB")
+        self.query_one("#dash_kpi_ram_sub", Static).update(f"{t_data.ram_percent}% belegt")
 
-        self.query_one("#dash_kpi_disk_val", Static).update(_render_bar(t.disk_percent))
-        fs_str = "Btrfs (CoW & Snapshots)" if t.is_btrfs else "Standard-Dateisystem"
-        self.query_one("#dash_kpi_disk_sub", Static).update(f"{t.disk_used_gb} / {t.disk_total_gb} GB ({fs_str})")
+        self.query_one("#dash_kpi_disk_val", Static).update(f"{t_data.disk_used_gb} / {t_data.disk_total_gb} GB")
+        fs_type = t("kpi_disk_btrfs") if t_data.is_btrfs else t("kpi_disk_standard")
+        self.query_one("#dash_kpi_disk_sub", Static).update(f"{t_data.disk_percent}% ({fs_type})")
 
-        self.query_one("#dash_kpi_os_val", Static).update(f"[bold cyan]{t.os_name}[/bold cyan]")
-        self.query_one("#dash_kpi_os_sub", Static).update(f"Up: {t.uptime_str} │ Kernel: {t.kernel}")
+        self.query_one("#dash_kpi_kernel_val", Static).update(running_kernel.split("-cachyos")[0])
+        self.query_one("#dash_kpi_kernel_sub", Static).update(running_kernel)
 
-        # 2. Update Services-Matrix
-        table = self.query_one("#dash_services_table", DataTable)
-        table.clear()
-        services = get_services_status(["NetworkManager", "tailscaled", "sshd", "syncthing", "docker", "bluetooth"])
-        for s in services:
-            st_badge = "[bold green]● AKTIV[/bold green]" if s.active else "[dim]○ INAKTIV[/dim]"
-            en_badge = "[green]Autostart[/green]" if s.enabled else "[dim]Manuell[/dim]"
-            table.add_row(s.name, st_badge, s.substate, en_badge)
+        total_failed = t_data.failed_system_units + t_data.failed_user_units
+        if total_failed > 0:
+            self.query_one("#dash_kpi_health_val", Static).update("[red]WARN[/red]")
+            self.query_one("#dash_kpi_health_sub", Static).update(t("kpi_failed_units", count=total_failed))
+        else:
+            self.query_one("#dash_kpi_health_val", Static).update("[green]HEALTHY[/green]")
+            self.query_one("#dash_kpi_health_sub", Static).update(t("kpi_all_clean"))
 
-        # 3. Update Integritäts- und Netzwerkdaten
-        pacnews = find_pacnew_files()
-        pacnew_msg = (
-            f"[bold yellow]⚠ {len(pacnews)} ungemergte .pacnew Konfigurationen in /etc[/bold yellow] (Tab 5 'Wartung')"
-            if pacnews
-            else "[green]✔ Keine .pacnew Konflikte vorhanden[/green]"
-        )
+        # Pacman Lock Prüfung
+        pac_warn = self.query_one("#dash_pacman_warn", Static)
+        if is_pacman_locked():
+            pac_warn.update(f"[bold red]⚠️ {t('db_lock_warn')}[/bold red]")
+        else:
+            pac_warn.update("")
 
-        units_total = t.failed_system_units + t.failed_user_units
-        units_msg = (
-            f"[bold red]⚠ {units_total} fehlgeschlagene Einheiten ({t.failed_system_units} System, {t.failed_user_units} User)![/bold red] (Tab 5 'Wartung')"
-            if units_total > 0
-            else "[green]✔ Alle Systemd-Einheiten laufen fehlerfrei[/green]"
-        )
+        # Detail-Box formatieren
+        detail_lines = [
+            f"[bold cyan]{t('hostname')}:[/bold cyan]      {t_data.hostname}",
+            f"[bold cyan]{t('os_version')}:[/bold cyan] {t_data.os_name} ({t_data.architecture})",
+            f"[bold cyan]{t('uptime')}:[/bold cyan]          {t_data.uptime_str}",
+            f"[bold cyan]Root FS:[/bold cyan]          {'BTRFS (Subvolumes aktiv)' if t_data.is_btrfs else 'ext4/Standard'}",
+            "",
+            f"[bold yellow]CPU:[/bold yellow]              {_render_bar(t_data.cpu_percent)}",
+            f"[bold yellow]RAM:[/bold yellow]              {_render_bar(t_data.ram_percent)} ({t_data.ram_used_gb}G / {t_data.ram_total_gb}G)",
+            f"[bold yellow]Disk (/):[/bold yellow]         {_render_bar(t_data.disk_percent)} ({t_data.disk_used_gb}G / {t_data.disk_total_gb}G)",
+            "",
+            f"[bold magenta]Systemd Units:[/bold magenta]    {t_data.failed_system_units} System fehlgeschlagen │ {t_data.failed_user_units} User fehlgeschlagen",
+        ]
+        if t_data.failed_unit_names:
+            detail_lines.append(f"[red]Fehlgeschlagene Dienste: {', '.join(t_data.failed_unit_names[:3])}[/red]")
 
-        gw_out, _, _ = run_cmd("ip route | awk '/default/ {print $3 \" via \" $5}' | head -n 1")
-        ip_out, _, _ = run_cmd("ip -4 -o addr show scope global | awk '{print $2 \": \" $4}' | head -n 2")
-        dns_out, _, _ = run_cmd("grep 'nameserver' /etc/resolv.conf 2>/dev/null | awk '{print $2}' | head -n 2")
+        self.query_one("#dash_telemetry_box", Static).update("\n".join(detail_lines))
 
-        ts = get_tailscale_status()
-        ts_ip = ts.self_node.ip if (ts.running and ts.self_node) else "Nicht verbunden"
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        btn_id = event.button.id
+        status_box = self.query_one("#dash_action_status", Static)
 
-        combined_text = (
-            f"[b]INTEGRITÄTS-AUDIT:[/b]\n"
-            f"• Rechner: [cyan]{t.hostname}[/cyan] ({t.architecture}) │ Kernel: {t.kernel}\n"
-            f"• Konfiguration: {pacnew_msg}\n"
-            f"• Systemd-Units: {units_msg}\n\n"
-            f"[b]NETZWERK & MESH-ROUTING:[/b]\n"
-            f"• Lokale IPv4: {ip_out.replace(chr(10), ' │ ') or 'Keine aktive Verbindung'}\n"
-            f"• Standard-Gateway: {gw_out or 'Keine Standard-Route'}\n"
-            f"• DNS-Resolver: {dns_out.replace(chr(10), ', ') or 'systemd-resolved'}\n"
-            f"• Tailscale Mesh-IP: [cyan]{ts_ip}[/cyan]"
-        )
-        self.query_one("#dash_combined_status_box", Static).update(combined_text)
+        if btn_id == "btn_quick_clean_cache":
+            status_box.update(f"[yellow]{t('status_running')} ({t('action_cache_clean')})[/yellow]")
+            self.app.action_quick_clean_cache()
+        elif btn_id == "btn_quick_remove_orphans":
+            status_box.update(f"[yellow]{t('status_running')} ({t('action_orphan_remove')})[/yellow]")
+            self.app.action_quick_remove_orphans()
+        elif btn_id == "btn_quick_rate_mirrors":
+            status_box.update(f"[yellow]{t('status_running')} ({t('action_rate_mirrors')})[/yellow]")
+            self.app.action_quick_rate_mirrors()
+        elif btn_id == "btn_quick_trim":
+            status_box.update(f"[yellow]{t('status_running')} ({t('action_trim')})[/yellow]")
+            self.app.action_quick_trim()
+        elif btn_id == "btn_quick_reset_failed":
+            status_box.update(f"[yellow]{t('status_running')} ({t('action_reset_failed')})[/yellow]")
+            self.app.action_quick_reset_failed()

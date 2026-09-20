@@ -1,0 +1,54 @@
+# ===============================================================================
+#  CachyOS Control Center — Example Configuration File
+#  Target paths:
+#    User-specific:  ~/.config/cachyos-control-center/config.toml
+#    System-wide:    /etc/cachyos-control-center/config.toml
+# ===============================================================================
+
+[general]
+# Interface language: "de" (German) or "en" (English)
+language = "de"
+
+# Theme styling palette: "cachyos-emerald", "catppuccin-mocha", "nord"
+theme = "cachyos-emerald"
+
+# Background telemetry polling rate in seconds
+refresh_interval_seconds = 3
+
+# Preferred AUR helper: "auto", "yay", or "paru"
+aur_helper = "auto"
+
+[modules]
+# Toggle visible tabs and active monitoring routines
+cockpit = true
+kernel_driver = true
+hardware_power = true
+maintenance = true
+services = true
+diagnostics = true
+network = true
+
+[maintenance]
+# Number of package versions to retain during paccache cleanup
+keep_cache_versions = 2
+
+# Maximum storage size for systemd-journald logs
+journal_vacuum_size = "50M"
+
+# Prefer optimized CachyOS mirrors over upstream Arch Linux mirrors
+prefer_cachyos_mirrors = true
+
+[services]
+# List of critical systemd daemons displayed in the service manager
+monitored = [
+    "NetworkManager",
+    "bluetooth",
+    "tailscaled",
+    "sshd",
+    "ananicy-cpp",
+    "systemd-resolved",
+    "ufw",
+    "firewalld",
+    "docker",
+    "syncthing"
+]

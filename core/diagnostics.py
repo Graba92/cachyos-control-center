@@ -3,8 +3,9 @@
 
 """
 ===============================================================================
- CachyOS Control Center — Diagnostic Core Engine
- Evidenzbasierte Netzwerkprüfungen, Latenzmessungen, DNSSEC & Route-Audits
+ CachyOS Control Center — Diagnostic & Hardware Audit Core Engine
+ Hardware-Snapshots, Boot-Parameter (/proc/cmdline), Kernel-Logs (dmesg/journal),
+ Systemstart-Analyse (systemd-analyze) & Netzwerk-Audits
 ===============================================================================
 """
 
@@ -12,23 +13,24 @@ from __future__ import annotations
 
 import json
 import os
+import platform
 import shutil
 import socket
 import subprocess
 import time
 import urllib.request
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
-from .system import run_cmd
+from .system import get_system_telemetry, run_cmd
 
 
 @dataclass
 class DiagnosticItem:
     category: str
     test_name: str
-    status: str  # "PASS", "WARN", "FAIL"
+    status: str  # "PASS", "WARN", "FAIL", "INFO"
     metric_value: str
     details: str
     recommendation: str = ""
@@ -43,11 +45,120 @@ class DiagnosticResult:
     duration_seconds: float = 0.0
 
 
+def get_boot_cmdline() -> str:
+    """Liest die aktiven Kernel-Boot-Parameter aus /proc/cmdline."""
+    cmdline_file = Path("/proc/cmdline")
+    if cmdline_file.exists():
+        try:
+            return cmdline_file.read_text(encoding="utf-8").strip()
+        except Exception:
+            pass
+    return "N/A"
+
+
+def get_kernel_logs(max_lines: int = 40) -> List[str]:
+    """
+    Liest die neuesten Kernel-Logs via journalctl -k oder dmesg.
+    Benötigt dank systemd-journal Gruppe keine Root-Rechte.
+    """
+    logs: List[str] = []
+    if shutil.which("journalctl"):
+        out, _, code = run_cmd(f"journalctl -k -n {max_lines} --no-pager", timeout=5)
+        if code == 0 and out.strip():
+            return [line for line in out.splitlines() if line.strip()]
+
+    if shutil.which("dmesg"):
+        out, _, code = run_cmd(f"dmesg -T | tail -n {max_lines}", timeout=5)
+        if code == 0 and out.strip():
+            return [line for line in out.splitlines() if line.strip()]
+
+    return ["Keine Kernel-Logs abrufbar."]
+
+
+def get_boot_time_analysis() -> Dict[str, str]:
+    """Ermittelt Systemstartzeiten über systemd-analyze (Firmware, Loader, Kernel, Initrd, Userspace)."""
+    res = {
+        "status": "Available",
+        "summary": "systemd-analyze nicht verfügbar",
+        "firmware": "0s",
+        "loader": "0s",
+        "kernel": "0s",
+        "initrd": "0s",
+        "userspace": "0s",
+        "total": "0s",
+    }
+    if not shutil.which("systemd-analyze"):
+        res["status"] = "Unavailable/Not Installed"
+        res["summary"] = "systemd-analyze fehlt (Bestandteil von systemd)"
+        return res
+
+    out, _, code = run_cmd("systemd-analyze time", timeout=6)
+    if code == 0 and out.strip():
+        first_line = out.splitlines()[0]
+        res["summary"] = first_line
+        # Parser für Zeiten
+        import re
+        m = re.search(r"Startup finished in (.+)", first_line)
+        if m:
+            res["total"] = first_line.split("=")[-1].strip() if "=" in first_line else "N/A"
+    return res
+
+
+def get_hardware_snapshot() -> Dict[str, Any]:
+    """Erfasst einen vollständigen Hardware-Snapshot (CPU, Board, RAM, Disks, PCI)."""
+    snapshot: Dict[str, Any] = {
+        "cpu_model": "Unbekannt",
+        "cpu_cores": os.cpu_count() or 1,
+        "motherboard": "Unbekannt",
+        "chassis": "Desktop / PC",
+        "disks": [],
+        "pci_controllers": [],
+    }
+
+    # CPU Modell aus /proc/cpuinfo
+    try:
+        with open("/proc/cpuinfo", "r") as f:
+            for line in f:
+                if line.startswith("model name"):
+                    snapshot["cpu_model"] = line.split(":", 1)[1].strip()
+                    break
+    except Exception:
+        pass
+
+    # Motherboard & DMI (falls lesbar in sysfs)
+    try:
+        board_vendor = Path("/sys/devices/virtual/dmi/id/board_vendor")
+        board_name = Path("/sys/devices/virtual/dmi/id/board_name")
+        if board_vendor.exists() and board_name.exists():
+            v = board_vendor.read_text(encoding="utf-8").strip()
+            n = board_name.read_text(encoding="utf-8").strip()
+            snapshot["motherboard"] = f"{v} {n}"
+    except Exception:
+        pass
+
+    # Block Devices / Disks via lsblk
+    if shutil.which("lsblk"):
+        out, _, code = run_cmd("lsblk -d -n -o NAME,SIZE,TYPE,MODEL", timeout=5)
+        if code == 0 and out.strip():
+            for l in out.splitlines():
+                parts = l.split(maxsplit=3)
+                if len(parts) >= 3 and parts[2] in ["disk", "nvme"]:
+                    model = parts[3] if len(parts) > 3 else "Storage Device"
+                    snapshot["disks"].append(f"/dev/{parts[0]} ({parts[1]}, {model})")
+
+    # PCI Controller Auszug
+    if shutil.which("lspci"):
+        out, _, code = run_cmd("lspci | grep -E 'VGA|Audio|Network|Ethernet|Non-Volatile'", timeout=5)
+        if code == 0 and out.strip():
+            snapshot["pci_controllers"] = [line.split(":", 1)[-1].strip() for line in out.splitlines() if line.strip()]
+
+    return snapshot
+
+
 def _check_ping(target: str, count: int = 2, timeout: int = 3) -> Tuple[bool, str]:
     """Pinget ein Ziel an und liefert Latenz oder Fehler."""
     out, err, code = run_cmd(f"ping -c {count} -W {timeout} {target}", timeout=timeout + 2)
     if code == 0:
-        # Extrahiere rtt min/avg/max
         for line in out.splitlines():
             if "rtt min/avg/max" in line or "round-trip min/avg/max" in line:
                 stats = line.split("=")[1].strip().split("/")[1]
@@ -66,102 +177,83 @@ def _check_dns(domain: str, server: Optional[str] = None) -> Tuple[bool, str]:
         return False, "Auflösung fehlgeschlagen"
     else:
         try:
-            start = time.time()
             ip = socket.gethostbyname(domain)
-            lat = round((time.time() - start) * 1000, 1)
-            return True, f"{ip} ({lat}ms)"
-        except Exception as e:
-            return False, str(e)
+            return True, ip
+        except Exception:
+            return False, "Auflösung fehlgeschlagen"
 
 
 def _check_http(url: str = "http://connectivitycheck.gstatic.com/generate_204", timeout: int = 3) -> Tuple[bool, str]:
-    """Prüft HTTP-Konnektivität gegen 204 Captive Portal Endpunkte."""
+    """Prüft HTTP Internetverbindung / Captive Portal."""
     try:
-        req = urllib.request.Request(url, headers={"User-Agent": "CachyOS-Center/1.0"})
-        start = time.time()
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            code = resp.getcode()
-            lat = round((time.time() - start) * 1000, 1)
-            if code in (200, 204):
-                return True, f"HTTP {code} ({lat}ms)"
-            return False, f"Unerwarteter Status: HTTP {code}"
-    except Exception as e:
-        return False, f"Verbindungsabbruch: {e}"
+        req = urllib.request.Request(url, headers={"User-Agent": "CachyOS-Control-Center/1.0"})
+        with urllib.request.urlopen(req, timeout=timeout) as response:
+            if response.status == 204 or response.status == 200:
+                return True, "Online (HTTP 204 OK)"
+            return False, f"HTTP Status {response.status}"
+    except Exception as exc:
+        return False, f"Offline ({exc})"
 
 
 def run_diagnostic_profile(profile: str = "quick") -> DiagnosticResult:
-    """Führt ein Diagnostik-Profil nativ aus und sammelt standardisierte Items."""
+    """Führt ein Diagnoseprofil (quick, standard, deep) aus."""
     start_time = time.time()
     items: List[DiagnosticItem] = []
-    profile = profile.lower()
 
-    # 1. Gateway
-    gw_out, _, _ = run_cmd("ip route | awk '/default/ {print $3}' | head -n 1")
-    gw_ip = gw_out.strip()
-    if gw_ip:
-        ok, lat = _check_ping(gw_ip)
+    # 1. Gateway Ping
+    gw_out, _, _ = run_cmd("ip route show default | awk '{print $3}' | head -n1")
+    gateway = gw_out.strip()
+    if gateway:
+        gw_ok, gw_lat = _check_ping(gateway)
         items.append(
             DiagnosticItem(
-                category="Gateway & Routing",
-                test_name="Default Gateway Ping",
-                status="PASS" if ok else "FAIL",
-                metric_value=lat,
-                details=f"Gateway IP: {gw_ip}",
-                recommendation="" if ok else "Prüfe Router-Kabel, WLAN-Verbindung oder DHCP-Zuweisung.",
+                category="Lokales Netzwerk (LAN)",
+                test_name="Default Gateway RTT",
+                status="PASS" if gw_ok else "FAIL",
+                metric_value=gw_lat,
+                details=f"Gateway IP: {gateway}",
+                recommendation="" if gw_ok else "LAN-Kabel oder WLAN-Verbindung zum Router prüfen.",
             )
         )
     else:
         items.append(
             DiagnosticItem(
-                category="Gateway & Routing",
-                test_name="Default Route",
+                category="Lokales Netzwerk (LAN)",
+                test_name="Default Gateway RTT",
                 status="FAIL",
-                metric_value="Fehlt",
-                details="Keine Standardroute in der Kernel-Routing-Tabelle vorhanden.",
-                recommendation="Starte NetworkManager neu oder verbinde die Schnittstelle.",
+                metric_value="Keine Route",
+                details="Kein Standard-Gateway konfiguriert",
+                recommendation="Netzwerkverbindung aktivieren.",
             )
         )
 
-    # 2. DNS
-    dns_ok, dns_res = _check_dns("cachyos.org")
+    # 2. DNS Auflösung
+    dns_ok, dns_val = _check_dns("archlinux.org")
     items.append(
         DiagnosticItem(
             category="DNS Resolution",
-            test_name="System DNS (cachyos.org)",
+            test_name="System DNS Resolver",
             status="PASS" if dns_ok else "FAIL",
-            metric_value=dns_res,
-            details="Standard-Resolver des Systems",
-            recommendation="" if dns_ok else "Überprüfe /etc/resolv.conf oder systemd-resolved.",
+            metric_value=dns_val,
+            details="Abfrage von archlinux.org",
+            recommendation="" if dns_ok else "DNS-Konfiguration in /etc/resolv.conf prüfen.",
         )
     )
 
-    # 3. Cloudflare & Quad9 External DNS
-    cf_ok, cf_lat = _check_ping("1.1.1.1")
-    items.append(
-        DiagnosticItem(
-            category="Internet WAN",
-            test_name="Cloudflare Anycast (1.1.1.1)",
-            status="PASS" if cf_ok else "WARN",
-            metric_value=cf_lat,
-            details="Globaler DNS & WAN-Latenz-Indikator",
-            recommendation="" if cf_ok else "WAN-Routing eingeschränkt oder ICMP gefiltert.",
-        )
-    )
-
-    # 4. HTTP 204 Captive Portal
+    # 3. Internet Connectivity
     http_ok, http_res = _check_http()
     items.append(
         DiagnosticItem(
             category="Internet WAN",
-            test_name="HTTP Connectivity (Captive Check)",
+            test_name="HTTP Connectivity",
             status="PASS" if http_ok else "FAIL",
             metric_value=http_res,
-            details="Prüfung auf transparente Proxys & Port-80/443 Freigabe",
-            recommendation="" if http_ok else "Möglicherweise Anmeldeseite (Captive Portal) im WLAN aktiv.",
+            details="Google 204 Connectivity Check",
+            recommendation="" if http_ok else "Prüfen ob Internetverbindung oder Captive Portal aktiv ist.",
         )
     )
 
-    # 5. Tailscale Mesh L3
+    # 4. Tailscale State
     if shutil.which("tailscale"):
         ts_out, _, ts_code = run_cmd("tailscale status --json | grep -o '\"BackendState\":\"[^\"]*\"'")
         ts_state = ts_out.split(":")[-1].replace('"', '') if ts_out else "Inaktiv"
@@ -171,83 +263,88 @@ def run_diagnostic_profile(profile: str = "quick") -> DiagnosticResult:
                 test_name="Daemon State",
                 status="PASS" if ts_state.lower() == "running" else "WARN",
                 metric_value=ts_state or "Stopped",
-                details="Tailscale Service & WireGuard Virtual Interface",
+                details="WireGuard Virtual Interface",
                 recommendation="" if ts_state.lower() == "running" else "tailscale up ausführen falls Mesh gewünscht.",
             )
         )
 
-    # Erweiterte Prüfungen für Standard & Deep
-    if profile in ("standard", "deep"):
-        # DNSSEC
-        if shutil.which("delv"):
-            delv_out, _, d_code = run_cmd("delv @1.1.1.1 cloudflare.com")
-            sec_ok = "fully validated" in delv_out.lower()
-            items.append(
-                DiagnosticItem(
-                    category="DNS Resolution",
-                    test_name="DNSSEC Validation",
-                    status="PASS" if sec_ok else "WARN",
-                    metric_value="Validiert" if sec_ok else "Unvalidiert",
-                    details=delv_out.splitlines()[0] if delv_out else "-",
-                )
-            )
-
-        # Lokale Listening Ports
-        ports_out, _, _ = run_cmd("ss -tulpn | grep LISTEN | wc -l")
-        p_count = ports_out.strip() or "0"
-        items.append(
-            DiagnosticItem(
-                category="Lokale Dienste",
-                test_name="Offene Listening Ports",
-                status="PASS",
-                metric_value=f"{p_count} Ports",
-                details="Lokale TCP/UDP Daemons",
-            )
-        )
-
-    if profile == "deep":
-        # MTU Discovery
-        mtu_out, _, _ = run_cmd("ip route show default | grep -o 'mtu [0-9]*'")
-        items.append(
-            DiagnosticItem(
-                category="Schnittstellen & MTU",
-                test_name="Default Interface MTU",
-                status="PASS",
-                metric_value=mtu_out.replace("mtu ", "") if mtu_out else "1500 (Standard)",
-                details="Maximum Transmission Unit",
-            )
-        )
-
-        # CGNAT Check (RFC 6598: 100.64.0.0/10)
-        wan_ip_out, _, _ = run_cmd("curl -s --max-time 3 https://api.ipify.org 2>/dev/null")
-        wan_ip = wan_ip_out.strip() or "N/A"
-        is_cgnat = wan_ip.startswith("100.")
-        items.append(
-            DiagnosticItem(
-                category="WAN & IP Topology",
-                test_name="Öffentliche IP / CGNAT",
-                status="WARN" if is_cgnat else "PASS",
-                metric_value=wan_ip,
-                details="CGNAT erkannt (RFC 6598)" if is_cgnat else "Direkte WAN-Adresse",
-                recommendation="Carrier-Grade NAT behindert Portfreigaben; Tailscale empfohlen." if is_cgnat else "",
-            )
-        )
-
-    # Health Ermittlung
     fails = sum(1 for it in items if it.status == "FAIL")
     warns = sum(1 for it in items if it.status == "WARN")
+    health = "CRITICAL" if fails > 0 else ("DEGRADED" if warns > 0 else "HEALTHY")
 
-    if fails > 0:
-        health = "CRITICAL"
-    elif warns > 0:
-        health = "DEGRADED"
-    else:
-        health = "HEALTHY"
-
-    duration = round(time.time() - start_time, 2)
     return DiagnosticResult(
         profile=profile,
         overall_health=health,
         items=items,
-        duration_seconds=duration,
+        duration_seconds=round(time.time() - start_time, 2),
     )
+
+
+def generate_full_audit_json() -> Dict[str, Any]:
+    """Generiert einen vollständigen System-Audit-Bericht als strukturiertes JSON."""
+    from .kernel_driver import detect_gpu_devices, list_cachyos_kernels
+    from .hardware_power import get_complete_power_profile
+    from .maintenance import find_pacnew_files, get_orphan_packages, get_pacman_cache_size, check_available_updates
+
+    telemetry = get_system_telemetry()
+    installed_k, available_k = list_cachyos_kernels()
+    gpus = detect_gpu_devices()
+    power = get_complete_power_profile()
+    diag = run_diagnostic_profile("quick")
+    boot_time = get_boot_time_analysis()
+    hw_snap = get_hardware_snapshot()
+    update_count, update_msg = check_available_updates()
+
+    return {
+        "timestamp": telemetry.timestamp,
+        "system": {
+            "hostname": telemetry.hostname,
+            "os_name": telemetry.os_name,
+            "kernel": telemetry.kernel,
+            "architecture": telemetry.architecture,
+            "uptime": telemetry.uptime_str,
+            "cpu_cores": telemetry.cpu_cores,
+            "cpu_usage_percent": telemetry.cpu_percent,
+            "ram_total_gb": telemetry.ram_total_gb,
+            "ram_used_gb": telemetry.ram_used_gb,
+            "ram_percent": telemetry.ram_percent,
+            "disk_total_gb": telemetry.disk_total_gb,
+            "disk_used_gb": telemetry.disk_used_gb,
+            "disk_percent": telemetry.disk_percent,
+            "is_btrfs": telemetry.is_btrfs,
+            "failed_system_units": telemetry.failed_system_units,
+            "failed_user_units": telemetry.failed_user_units,
+            "failed_unit_names": telemetry.failed_unit_names,
+        },
+        "hardware": hw_snap,
+        "boot": {
+            "cmdline": get_boot_cmdline(),
+            "boot_time": boot_time,
+        },
+        "kernels": {
+            "running": telemetry.kernel,
+            "installed": [asdict(k) for k in installed_k],
+            "available": [asdict(k) for k in available_k],
+        },
+        "gpus": [asdict(g) for g in gpus],
+        "power_and_thermals": {
+            "governor": power.cpu.current_governor,
+            "available_governors": power.cpu.available_governors,
+            "epp": power.cpu.current_epp,
+            "available_epp": power.cpu.available_epp,
+            "is_throttled": power.is_throttled,
+            "throttle_message": power.throttle_message,
+            "thermal_zones": [asdict(z) for z in power.thermals],
+        },
+        "maintenance": {
+            "cache_size": get_pacman_cache_size(),
+            "orphan_packages": get_orphan_packages(),
+            "pacnew_files": find_pacnew_files(),
+            "available_updates": update_count,
+            "update_message": update_msg,
+        },
+        "network_diagnostics": {
+            "health": diag.overall_health,
+            "items": [asdict(it) for it in diag.items],
+        },
+    }

@@ -3,22 +3,31 @@
 
 """
 ===============================================================================
- CachyOS Control Center — Maintenance & System Hygiene View
- Pacman Cache, Journal Vacuum, Pacnew Auditor, Failed Unit Resets & CLI Suites
+ CachyOS Control Center — System Maintenance View
+ Mirror-Benchmarking, Paket-Cache-Hygiene, Waisenpakete & .pacnew-Audits
 ===============================================================================
 """
 
 from __future__ import annotations
 
-import os
 import shutil
-import subprocess
-from pathlib import Path
 from textual.app import ComposeResult
 from textual.containers import Container, Horizontal, Vertical
 from textual.widgets import Button, DataTable, Label, Static
 
-from core.maintenance import find_pacnew_files
+from core.maintenance import (
+    clean_pacman_cache,
+    remove_orphan_packages,
+    benchmark_mirrors,
+    vacuum_journal,
+    find_pacnew_files,
+    run_fstrim,
+    check_available_updates,
+    get_orphan_packages,
+    get_pacman_cache_size,
+)
+from core.polkit import is_pacman_locked
+from core.i18n import t
 
 
 class MaintView(Container):
@@ -31,76 +40,99 @@ class MaintView(Container):
     """
 
     def compose(self) -> ComposeResult:
-        yield Label("🔒 CACHYOS SYSTEMHYGIENE & WARTUNGSZENTRUM", classes="section-label")
-
         with Horizontal(classes="split-h"):
-            # Linke Spalte: Wartungs-Aktionen
-            with Vertical(classes="col-half"):
-                yield Label("⚡ HYGIENE- & SPEICHEROPERATIONEN", classes="title")
-                with Vertical(classes="panel"):
-                    yield Button("[C] Pacman Cache leeren (paccache)", id="btn_maint_cache", classes="-warning")
-                    yield Button("[J] Journal trimmen (50M)", id="btn_maint_journal", classes="-warning")
-                    yield Button("[R] Fehlgeschlagene Units resetten", id="btn_maint_reset_units", classes="-error")
-                    yield Button("[T] SSD TRIM (fstrim)", id="btn_maint_fstrim", classes="-default")
-                    yield Button("[U] Paketupdates prüfen", id="btn_maint_check_updates", classes="-primary")
+            # Linke Spalte: Paket-Cache & Waisenpakete
+            with Vertical(classes="col-left panel"):
+                yield Label(f"📦  {t('pkg_cache_title')}", classes="panel-title")
+                yield Static("", id="maint_cache_status", classes="term-box")
 
-                yield Label("EXTERNE WARTUNGSSUITEN (IM TERMINAL)", classes="title")
                 with Horizontal(classes="toolbar"):
-                    yield Button("[W] wartung-os.sh", id="btn_maint_launch_wartung", classes="-primary")
-                    yield Button("[M] Ultimate Manager", id="btn_maint_launch_manager", classes="-default")
+                    yield Button(f"🧹  {t('btn_clean_cache')}", id="btn_maint_clean_cache", classes="-primary btn-small")
+                    yield Button(f"🗑️  {t('btn_remove_orphans')}", id="btn_maint_remove_orphans", classes="btn-small")
 
-            # Rechte Spalte: Pacnew Auditor
-            with Vertical(classes="col-half"):
-                yield Label("📄 UNGEMERGTE .PACNEW DATEIEN IN /ETC", classes="title")
-                yield DataTable(id="maint_pacnew_table", cursor_type="row")
+                yield Label(f"🚀  {t('mirror_bench_title')}", classes="panel-title")
+                yield Static("Misst die Latenz & Bandbreite aller CachyOS/Arch Mirrors und sortiert die Mirrorlist nach Geschwindigkeit:", classes="text-muted")
                 with Horizontal(classes="toolbar"):
-                    yield Button("[S] Pacnew Scan aktualisieren", id="btn_maint_refresh_pacnew", classes="-default")
-                yield Static(
-                    "Tipp: .pacnew Dateien entstehen bei Updates, wenn geänderte Konfigurationen kollidieren. "
-                    "Nutze 'pacdiff' oder meld im Terminal für den Drei-Wege-Merge.",
-                    id="maint_pacnew_info",
-                    classes="info-box",
-                )
+                    yield Button(f"⚡  {t('btn_run_mirror_bench')}", id="btn_maint_benchmark_mirrors", classes="btn-small")
+
+                yield Label("Systemoptimierung & Trim:", classes="panel-subtitle")
+                with Horizontal(classes="toolbar"):
+                    yield Button(f"💾  {t('btn_fstrim')}", id="btn_maint_fstrim", classes="btn-small")
+                    yield Button(f"📜  {t('btn_journal_vacuum')}", id="btn_maint_vacuum", classes="btn-small")
+
+                yield Static("", id="maint_action_output", classes="term-box")
+
+            # Rechte Spalte: Waisen-Tabelle & Pacnew-Dateien
+            with Vertical(classes="col-right panel"):
+                yield Label(f"📄  {t('pacnew_audit_title')}", classes="panel-title")
+                yield Static("", id="maint_pacnew_info", classes="term-box")
+                
+                yield Label("Erkannte Waisenpakete (Unbenutzte Bibliotheken):", classes="panel-subtitle")
+                yield DataTable(id="tbl_orphans")
 
     def on_mount(self) -> None:
-        table = self.query_one("#maint_pacnew_table", DataTable)
-        table.add_columns("Dateipfad in /etc", "Status")
-        self.refresh_pacnew_list()
+        self._init_tables()
+        self.refresh_maintenance_info()
 
-    def refresh_pacnew_list(self) -> None:
-        table = self.query_one("#maint_pacnew_table", DataTable)
-        table.clear()
+    def _init_tables(self) -> None:
+        tbl = self.query_one("#tbl_orphans", DataTable)
+        tbl.cursor_type = "row"
+        tbl.zebra_stripes = True
+        tbl.clear(columns=True)
+        tbl.add_columns("Paketname", "Aktion")
+
+    def refresh_maintenance_info(self) -> None:
+        cache_sz = get_pacman_cache_size()
+        orphans = get_orphan_packages()
         pacnews = find_pacnew_files()
-        for p in pacnews:
-            table.add_row(p, "[bold yellow]Ungemergt[/bold yellow]")
+        up_count, up_msg = check_available_updates()
 
-        info = self.query_one("#maint_pacnew_info", Static)
+        # Cache Status
+        cache_lines = [
+            f"[bold cyan]Pacman Cache Belegung:[/bold cyan] {cache_sz}",
+            f"[bold cyan]Waisenpakete (Orphans):[/bold cyan] {len(orphans)} gefunden",
+            f"[bold cyan]Anstehende Updates:[/bold cyan]    {up_msg}",
+        ]
+        if is_pacman_locked():
+            cache_lines.append(f"[bold red]⚠️ {t('db_lock_warn')}[/bold red]")
+
+        self.query_one("#maint_cache_status", Static).update("\n".join(cache_lines))
+
+        # Pacnew Info
         if pacnews:
-            info.update(
-                f"[bold yellow]Gefunden: {len(pacnews)} ungemergte .pacnew Dateien.[/bold yellow]\n"
-                f"Ausstehende Dateien gefährden langfristig die Systemstabilität. Abgleich mit pacdiff empfohlen."
-            )
+            pn_lines = [f"[bold yellow]⚠️ {len(pacnews)} ungemergte .pacnew Konfigurationen gefunden:[/bold yellow]"]
+            for p in pacnews:
+                pn_lines.append(f"  • [white]{p}[/white]")
+            pn_lines.append("\nTipp: Verwenden Sie [bold cyan]pacdiff[/bold cyan] zum Mergen.")
+            self.query_one("#maint_pacnew_info", Static).update("\n".join(pn_lines))
         else:
-            info.update("[bold green]Perfekt: Keine ungemergten .pacnew Dateien gefunden.[/bold green]")
+            self.query_one("#maint_pacnew_info", Static).update(f"[bold green]✓ {t('no_pacnews_found')}[/bold green]")
 
-    def launch_terminal_script(self, script_name: str) -> bool:
-        """Startet ein externes Wartungsskript in einem separaten Terminal."""
-        local_bin = Path(__file__).resolve().parent.parent.parent / "bin"
-        user_scripts = Path.home() / ".local" / "bin"
-        
-        target = local_bin / script_name
-        if not target.exists():
-            target = user_scripts / script_name
-        if not target.exists():
-            return False
+        # Waisen-Tabelle
+        tbl = self.query_one("#tbl_orphans", DataTable)
+        tbl.clear()
+        if not orphans:
+            tbl.add_row(f"[dim]{t('no_orphans_found')}[/dim]", "-")
+        else:
+            for o in orphans:
+                tbl.add_row(o, "[red]Wird entfernt[/red]", key=o)
 
-        term_cmd = None
-        for term in ["alacritty", "konsole", "ghostty", "kitty", "xterm"]:
-            if shutil.which(term):
-                term_cmd = [term, "-e", "bash", str(target)]
-                break
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        btn_id = event.button.id
+        out_box = self.query_one("#maint_action_output", Static)
 
-        if term_cmd:
-            subprocess.Popen(term_cmd)
-            return True
-        return False
+        if btn_id == "btn_maint_clean_cache":
+            out_box.update(f"[yellow]{t('status_running')} ({t('action_cache_clean')})[/yellow]")
+            self.app.action_quick_clean_cache()
+        elif btn_id == "btn_maint_remove_orphans":
+            out_box.update(f"[yellow]{t('status_running')} ({t('action_orphan_remove')})[/yellow]")
+            self.app.action_quick_remove_orphans()
+        elif btn_id == "btn_maint_benchmark_mirrors":
+            out_box.update(f"[yellow]{t('status_running')} ({t('action_rate_mirrors')})[/yellow]")
+            self.app.action_quick_rate_mirrors()
+        elif btn_id == "btn_maint_fstrim":
+            out_box.update(f"[yellow]{t('status_running')} ({t('action_trim')})[/yellow]")
+            self.app.action_quick_trim()
+        elif btn_id == "btn_maint_vacuum":
+            out_box.update(f"[yellow]{t('status_running')} (Journalctl Vacuum 50M)[/yellow]")
+            self.app.action_quick_journal_vacuum()

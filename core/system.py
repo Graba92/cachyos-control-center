@@ -201,12 +201,21 @@ def get_system_telemetry() -> SystemTelemetry:
 
     is_btrfs = _check_is_btrfs()
 
-    # Fehlgeschlagene Systemd Einheiten
     sys_fail_out, _, _ = run_cmd("systemctl --failed --no-legend")
     usr_fail_out, _, _ = run_cmd("systemctl --user --failed --no-legend")
 
-    sys_failed = [line.split()[0] for line in sys_fail_out.splitlines() if line.strip()]
-    usr_failed = [line.split()[0] for line in usr_fail_out.splitlines() if line.strip()]
+    def _parse_failed(output: str) -> List[str]:
+        units = []
+        for line in output.splitlines():
+            parts = line.split()
+            if not parts:
+                continue
+            unit_name = parts[1] if parts[0] in ("●", "*", "-") and len(parts) > 1 else parts[0]
+            units.append(unit_name)
+        return units
+
+    sys_failed = _parse_failed(sys_fail_out)
+    usr_failed = _parse_failed(usr_fail_out)
 
     all_failed = sys_failed + [f"[user] {u}" for u in usr_failed]
 

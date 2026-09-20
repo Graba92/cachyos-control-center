@@ -1,6 +1,6 @@
 """
 CachyOS Control Center — Core Engine Package
-Professional low-level system, network, VPN and maintenance modules.
+Professional low-level system, kernel, hardware power, security & maintenance modules.
 """
 
 from .system import (
@@ -9,6 +9,37 @@ from .system import (
     get_services_status,
     SystemTelemetry,
     ServiceStatus,
+)
+from .i18n import t, set_language, get_language, toggle_language
+from .config import load_config, save_user_config, get_config_file_path, get_xdg_config_dir
+from .polkit import (
+    run_polkit_cmd,
+    is_pacman_locked,
+    polkit_clean_cache,
+    polkit_remove_orphans,
+    polkit_service_action,
+    polkit_set_cpu_governor,
+    polkit_set_epp_preference,
+    polkit_run_mirror_bench,
+)
+from .kernel_driver import (
+    KernelInfo,
+    GPUDeviceInfo,
+    get_running_kernel,
+    list_cachyos_kernels,
+    detect_gpu_devices,
+    install_kernel,
+    remove_kernel,
+)
+from .hardware_power import (
+    CPUGovernorInfo,
+    ThermalZoneInfo,
+    PowerProfileStatus,
+    get_cpu_governor_info,
+    get_thermal_status,
+    get_complete_power_profile,
+    apply_governor,
+    apply_epp,
 )
 from .network import (
     get_network_interfaces,
@@ -29,16 +60,25 @@ from .tailscale import (
 )
 from .diagnostics import (
     run_diagnostic_profile,
+    get_boot_cmdline,
+    get_kernel_logs,
+    get_boot_time_analysis,
+    get_hardware_snapshot,
+    generate_full_audit_json,
     DiagnosticResult,
     DiagnosticItem,
 )
 from .maintenance import (
     clean_pacman_cache,
+    remove_orphan_packages,
+    benchmark_mirrors,
     vacuum_journal,
     find_pacnew_files,
     reset_failed_units,
     run_fstrim,
     check_available_updates,
+    get_orphan_packages,
+    get_pacman_cache_size,
 )
 from .ricing import (
     inspect_desktop_environment,
@@ -53,6 +93,37 @@ __all__ = [
     "get_services_status",
     "SystemTelemetry",
     "ServiceStatus",
+    "t",
+    "set_language",
+    "get_language",
+    "toggle_language",
+    "load_config",
+    "save_user_config",
+    "get_config_file_path",
+    "get_xdg_config_dir",
+    "run_polkit_cmd",
+    "is_pacman_locked",
+    "polkit_clean_cache",
+    "polkit_remove_orphans",
+    "polkit_service_action",
+    "polkit_set_cpu_governor",
+    "polkit_set_epp_preference",
+    "polkit_run_mirror_bench",
+    "KernelInfo",
+    "GPUDeviceInfo",
+    "get_running_kernel",
+    "list_cachyos_kernels",
+    "detect_gpu_devices",
+    "install_kernel",
+    "remove_kernel",
+    "CPUGovernorInfo",
+    "ThermalZoneInfo",
+    "PowerProfileStatus",
+    "get_cpu_governor_info",
+    "get_thermal_status",
+    "get_complete_power_profile",
+    "apply_governor",
+    "apply_epp",
     "get_network_interfaces",
     "scan_wifi_networks",
     "set_interface_mode",
@@ -67,14 +138,23 @@ __all__ = [
     "TailscaleNode",
     "TailscaleMeshStatus",
     "run_diagnostic_profile",
+    "get_boot_cmdline",
+    "get_kernel_logs",
+    "get_boot_time_analysis",
+    "get_hardware_snapshot",
+    "generate_full_audit_json",
     "DiagnosticResult",
     "DiagnosticItem",
     "clean_pacman_cache",
+    "remove_orphan_packages",
+    "benchmark_mirrors",
     "vacuum_journal",
     "find_pacnew_files",
     "reset_failed_units",
     "run_fstrim",
     "check_available_updates",
+    "get_orphan_packages",
+    "get_pacman_cache_size",
     "inspect_desktop_environment",
     "get_fastfetch_output",
     "RICE_KNOWLEDGE_BASE",

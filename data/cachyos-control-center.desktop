@@ -1,0 +1,13 @@
+[Desktop Entry]
+Name=CachyOS Control Center
+GenericName=System Administration Dashboard
+GenericName[de]=System- & Hardware-Kontrollzentrum
+Comment=Unified modular TUI dashboard and system control utility for CachyOS and Arch Linux
+Comment[de]=Zentrales TUI-Kontrollzentrum für Systemwartung, Kernel-Matrix, Power-Profile und Telemetrie
+Exec=cachyos-control-center
+Icon=cachyos-control-center
+Terminal=true
+Type=Application
+Categories=System;Settings;Monitor;HardwareSettings;
+Keywords=cachyos;kernel;arch;pacman;systemd;governor;clean;hardware;tui;
+StartupNotify=true
