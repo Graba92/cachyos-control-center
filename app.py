@@ -43,30 +43,31 @@ def handle_cli_status() -> int:
     up_count, up_msg = check_available_updates()
 
     print("\n" + "=" * 70)
-    print(" 🚀 CACHYOS CONTROL CENTER — SYSTEM TELEMETRIE & AUDIT")
+    print(f" {t('cli_header_telemetry')}")
     print("=" * 70)
-    print(f" Hostname:       {t_data.hostname}")
-    print(f" Betriebssystem: {t_data.os_name} ({t_data.architecture})")
-    print(f" Aktiver Kernel: {running_k}")
-    print(f" Betriebszeit:   {t_data.uptime_str}")
-    print(f" Boot-Dauer:     {boot_time.get('summary', 'N/A')}")
+    print(f" {t('hostname')}:       {t_data.hostname}")
+    print(f" {t('cli_os')}: {t_data.os_name} ({t_data.architecture})")
+    print(f" {t('cli_active_kernel')}: {running_k}")
+    print(f" {t('cli_uptime')}:   {t_data.uptime_str}")
+    print(f" {t('cli_boot_time')}:     {boot_time.get('summary', 'N/A')}")
     print("-" * 70)
-    print(f" CPU Auslastung: {t_data.cpu_percent}% ({t_data.cpu_cores} Kerne)")
-    print(f" CPU Governor:   {power.cpu.current_governor} (Verfügbar: {', '.join(power.cpu.available_governors)})")
+    print(f" {t('cli_cpu_usage')}: {t_data.cpu_percent}% ({t_data.cpu_cores} {t('cli_cores')})")
+    print(f" {t('cli_cpu_gov')}:   {power.cpu.current_governor} ({t('cli_available')}: {', '.join(power.cpu.available_governors)})")
     if power.cpu.current_epp:
-        print(f" EPP Profil:     {power.cpu.current_epp}")
-    print(f" Throttling:     {'NEIN (Optimal)' if not power.is_throttled else f'JA - {power.throttle_message}'}")
+        print(f" {t('cli_epp')}:     {power.cpu.current_epp}")
+    throttling_str = t('cli_throttling_no') if not power.is_throttled else f"{t('cli_throttling_yes')} - {power.throttle_message}"
+    print(f" {t('cli_throttling')}:     {throttling_str}")
     print("-" * 70)
-    print(f" RAM:            {t_data.ram_used_gb} / {t_data.ram_total_gb} GB ({t_data.ram_percent}%)")
-    print(f" Root Speicher:  {t_data.disk_used_gb} / {t_data.disk_total_gb} GB ({t_data.disk_percent}%) [BTRFS: {t_data.is_btrfs}]")
+    print(f" {t('cli_ram')}:            {t_data.ram_used_gb} / {t_data.ram_total_gb} GB ({t_data.ram_percent}%)")
+    print(f" {t('cli_root_storage')}:  {t_data.disk_used_gb} / {t_data.disk_total_gb} GB ({t_data.disk_percent}%) [BTRFS: {t_data.is_btrfs}]")
     print("-" * 70)
-    print(f" Pacman Cache:   {cache_sz}")
-    print(f" Waisenpakete:   {len(orphans)} ungenutzte Pakete")
-    print(f" Paket-Updates:  {up_msg}")
-    print(f" Failed Units:   System={t_data.failed_system_units}, User={t_data.failed_user_units}")
+    print(f" {t('cli_pacman_cache')}:   {cache_sz}")
+    print(f" {t('cli_orphan_pkgs')}:   {len(orphans)} {t('cli_orphan_unused')}")
+    print(f" {t('cli_pkg_updates')}:  {up_msg}")
+    print(f" {t('cli_failed_units')}:   System={t_data.failed_system_units}, User={t_data.failed_user_units}")
     if gpus:
         print("-" * 70)
-        print(" Grafikadapter (GPUs):")
+        print(f" {t('cli_gpus')}:")
         for g in gpus:
             extra = []
             if g.temperature_c is not None:
@@ -74,7 +75,8 @@ def handle_cli_status() -> int:
             if g.power_draw_w is not None:
                 extra.append(f"{g.power_draw_w}W")
             extra_str = f" [{', '.join(extra)}]" if extra else ""
-            print(f"  • {g.device_name} (Treiber: {g.active_driver}, {'Proprietär' if g.is_proprietary else 'Open'}){extra_str}")
+            driver_type = t('cli_proprietary') if g.is_proprietary else t('cli_open')
+            print(f"  • {g.device_name} ({t('cli_driver')}: {g.active_driver}, {driver_type}){extra_str}")
     print("=" * 70 + "\n")
     return 0
 
@@ -155,11 +157,12 @@ Beispiele:
         set_language(args.lang)
         cfg.setdefault("general", {})["language"] = args.lang
         save_user_config(cfg)
-        print(f"[OK] Sprache dauerhaft auf '{args.lang}' gesetzt.")
-        sys.exit(0)
-
-    # Sprache aus Config anwenden
-    set_language(cfg.get("general", {}).get("language", "de"))
+        if not (args.status or args.clean or args.json or args.diag):
+            print(f"[OK] Sprache dauerhaft auf '{args.lang}' gesetzt.")
+            sys.exit(0)
+    else:
+        # Sprache aus Config anwenden
+        set_language(cfg.get("general", {}).get("language", "de"))
 
     if args.status:
         sys.exit(handle_cli_status())
