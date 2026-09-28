@@ -68,9 +68,10 @@ def get_kernel_logs(max_lines: int = 40) -> List[str]:
             return [line for line in out.splitlines() if line.strip()]
 
     if shutil.which("dmesg"):
-        out, _, code = run_cmd(f"dmesg -T | tail -n {max_lines}", timeout=5)
+        out, _, code = run_cmd(["dmesg", "-T"], timeout=5)
         if code == 0 and out.strip():
-            return [line for line in out.splitlines() if line.strip()]
+            lines = [line for line in out.splitlines() if line.strip()]
+            return lines[-max_lines:]
 
     return ["Keine Kernel-Logs abrufbar."]
 
@@ -147,17 +148,23 @@ def get_hardware_snapshot() -> Dict[str, Any]:
                     snapshot["disks"].append(f"/dev/{parts[0]} ({parts[1]}, {model})")
 
     # PCI Controller Auszug
+    # PCI Controller Auszug
     if shutil.which("lspci"):
-        out, _, code = run_cmd("lspci | grep -E 'VGA|Audio|Network|Ethernet|Non-Volatile'", timeout=5)
+        out, _, code = run_cmd(["lspci"], timeout=5)
         if code == 0 and out.strip():
-            snapshot["pci_controllers"] = [line.split(":", 1)[-1].strip() for line in out.splitlines() if line.strip()]
+            targets = ("vga", "audio", "network", "ethernet", "non-volatile")
+            snapshot["pci_controllers"] = [
+                line.split(":", 1)[-1].strip()
+                for line in out.splitlines()
+                if any(t in line.lower() for t in targets)
+            ]
 
     return snapshot
 
 
 def _check_ping(target: str, count: int = 2, timeout: int = 3) -> Tuple[bool, str]:
     """Pinget ein Ziel an und liefert Latenz oder Fehler."""
-    out, err, code = run_cmd(f"ping -c {count} -W {timeout} {target}", timeout=timeout + 2)
+    out, err, code = run_cmd(["ping", "-c", str(count), "-W", str(timeout), str(target)], timeout=timeout + 2)
     if code == 0:
         for line in out.splitlines():
             if "rtt min/avg/max" in line or "round-trip min/avg/max" in line:
@@ -170,7 +177,7 @@ def _check_ping(target: str, count: int = 2, timeout: int = 3) -> Tuple[bool, st
 def _check_dns(domain: str, server: Optional[str] = None) -> Tuple[bool, str]:
     """Prüft DNS-Auflösung via dig oder socket."""
     if server and shutil.which("dig"):
-        out, err, code = run_cmd(f"dig +short +time=2 +tries=1 @{server} {domain}")
+        out, err, code = run_cmd(["dig", "+short", "+time=2", "+tries=1", f"@{server}", str(domain)])
         if code == 0 and out.strip():
             first_ip = out.strip().splitlines()[0]
             return True, first_ip
@@ -201,8 +208,16 @@ def run_diagnostic_profile(profile: str = "quick") -> DiagnosticResult:
     items: List[DiagnosticItem] = []
 
     # 1. Gateway Ping
-    gw_out, _, _ = run_cmd("ip route show default | awk '{print $3}' | head -n1")
-    gateway = gw_out.strip()
+    gw_out, _, _ = run_cmd(["ip", "route", "show", "default"], timeout=3)
+    gateway = ""
+    for line in gw_out.splitlines():
+        parts = line.split()
+        if len(parts) >= 3 and parts[0] == "default" and parts[1] == "via":
+            gateway = parts[2]
+            break
+        elif len(parts) >= 3 and parts[0] == "default":
+            gateway = parts[2]
+            break
     if gateway:
         gw_ok, gw_lat = _check_ping(gateway)
         items.append(
@@ -255,8 +270,15 @@ def run_diagnostic_profile(profile: str = "quick") -> DiagnosticResult:
 
     # 4. Tailscale State
     if shutil.which("tailscale"):
-        ts_out, _, ts_code = run_cmd("tailscale status --json | grep -o '\"BackendState\":\"[^\"]*\"'")
-        ts_state = ts_out.split(":")[-1].replace('"', '') if ts_out else "Inaktiv"
+        ts_out, _, ts_code = run_cmd(["tailscale", "status", "--json"], timeout=5)
+        ts_state = "Inaktiv"
+        if ts_code == 0 and ts_out.strip():
+            try:
+                import json
+                ts_data = json.loads(ts_out)
+                ts_state = ts_data.get("BackendState", "Inaktiv")
+            except Exception:
+                ts_state = "Error"
         items.append(
             DiagnosticItem(
                 category="Tailscale Mesh",

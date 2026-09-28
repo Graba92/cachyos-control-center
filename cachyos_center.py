@@ -72,6 +72,8 @@ from core.maintenance import (
     reset_failed_units,
     run_fstrim,
     check_available_updates,
+    get_maintenance_timers,
+    toggle_maintenance_timer,
 )
 from core.polkit import polkit_service_action, is_pacman_locked
 from core.diagnostics import run_diagnostic_profile
@@ -273,6 +275,16 @@ class CachyOSCenterApp(App):
             self.notify(f"Journal: {msg}", severity="error")
 
     @work(thread=True)
+    def action_toggle_maintenance_timer(self, timer_name: str, enable: bool) -> None:
+        self.notify(f"Passe Hintergrund-Timer {timer_name} an...", severity="information")
+        ok, msg = toggle_maintenance_timer(timer_name, enable)
+        if ok:
+            self.notify(msg, severity="information")
+        else:
+            self.notify(f"Timer Fehler: {msg}", severity="error")
+        self.call_from_thread(self._post_action_refresh)
+
+    @work(thread=True)
     def action_install_selected_kernel(self, package_name: str) -> None:
         self.notify(f"Installiere {package_name} via Polkit...", severity="information")
         ok, msg = install_kernel(package_name)
@@ -334,5 +346,11 @@ class CachyOSCenterApp(App):
 
 
 if __name__ == "__main__":
+    if not sys.stdin.isatty():
+        for term in ["konsole", "alacritty", "kitty", "ptyxis", "xfce4-terminal", "gnome-terminal", "xterm"]:
+            if shutil.which(term):
+                launcher = SCRIPT_DIR / "run.sh"
+                if launcher.exists():
+                    os.execvp(term, [term, "-e", str(launcher)])
     app = CachyOSCenterApp()
     app.run()

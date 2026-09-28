@@ -6,6 +6,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.1.0] - 2026-09-28 (Async Maintenance Architecture, Terminal Auto-Spawn & Startup Freeze Fix)
+
+### 🚀 Fixed & Improved
+- **Startup Freeze Elimination:** Converted maintenance data retrieval (`checkupdates`, orphan audit, cache query) into a non-blocking background worker (`@work(thread=True)`) in `MaintView`. The application cockpit now starts instantaneously (under 1 second) without freezing the Textual event loop.
+- **Defensive Checkupdates Self-Healing:** Added automatic corruption detection and self-healing in `core/maintenance.py`. Broken temporary databases (`/tmp/checkup-db-$UID` caused by interrupted downloads or bad archive headers) are automatically purged on error.
+- **Universal Launcher & TTY Auto-Spawn:** Enhanced `run.sh` with robust symlink resolution (`realpath`) and intelligent GUI/TTY auto-detection. Launching via file manager (Dolphin) or desktop icon automatically spawns the installed terminal emulator (`konsole`, `alacritty`, `kitty`, etc.).
+- **Desktop & CLI Integration:** Upgraded `setup.sh` to install user-space symlinks into `~/.local/bin/cachyos-control-center` and registered the desktop launcher in `~/.local/share/applications/` and icon theme directories.
+- **Automated Systemd Maintenance Timers:** Integrated live status tracking and one-click controls for background maintenance timers (`fstrim.timer`, `paccache.timer`).
+- **Command Security Hardening:** Refactored command execution across `core/system.py` and `core/polkit.py` to enforce strict `shell=False` execution with tokenized argument vectors, eliminating injection vectors.
+
+---
+
 ## [1.0.1] - 2026-09-20 (Contrast Fix, Layout Streamlining & Visual Polish)
 
 ### 🎨 Fixed & Improved

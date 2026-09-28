@@ -70,6 +70,30 @@ class TestCachyOSControlCenter(unittest.TestCase):
         self.assertIsInstance(cfg, dict)
         self.assertIn("general", cfg)
 
+    def test_maintenance_timers(self):
+        from core.maintenance import get_maintenance_timers, MaintenanceTimer
+        timers = get_maintenance_timers()
+        self.assertIsInstance(timers, list)
+        self.assertTrue(len(timers) >= 2)
+        timer_names = [t.name for t in timers]
+        self.assertIn("fstrim.timer", timer_names)
+        self.assertIn("paccache.timer", timer_names)
+
+    def test_safe_run_cmd(self):
+        from core.system import run_cmd
+        out, err, code = run_cmd(["echo", "safe_token_test"])
+        self.assertEqual(code, 0)
+        self.assertEqual(out.strip(), "safe_token_test")
+
+    def test_check_available_updates_defensive(self):
+        from core.maintenance import check_available_updates
+        count, msg = check_available_updates(timeout=5)
+        self.assertIsInstance(count, int)
+        self.assertIsInstance(msg, str)
+        self.assertTrue(len(msg) > 0)
+
 
 if __name__ == "__main__":
     unittest.main()
+
+

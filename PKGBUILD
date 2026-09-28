@@ -1,6 +1,6 @@
 # Maintainer: Matthias Haase (Graba92) <https://github.com/Graba92>
 pkgname=cachyos-control-center
-pkgver=1.0.0
+pkgver=1.1.0
 pkgrel=1
 pkgdesc="Unified modular system administration dashboard and control utility for CachyOS and Arch Linux"
 arch=('any')

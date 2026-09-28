@@ -7,7 +7,7 @@
 [![Python](https://img.shields.io/badge/Python-3.11%2B-blue.svg?logo=python)](https://python.org)
 [![TUI](https://img.shields.io/badge/UI-Textual%208.2%2B-green.svg)](https://textual.textualize.io)
 [![License](https://img.shields.io/badge/License-MIT-purple.svg)](LICENSE)
-[![Release](https://img.shields.io/badge/Version-v1.0.1-emerald.svg)](CHANGELOG.md)
+[![Release](https://img.shields.io/badge/Version-v1.1.0-emerald.svg)](CHANGELOG.md)
 
 <p align="center">
   <img src="preview_dashboard.png" alt="CachyOS Control Center Cockpit" width="900">

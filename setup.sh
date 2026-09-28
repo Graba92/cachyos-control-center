@@ -83,14 +83,38 @@ else
 fi
 
 # 3. Berechtigungen setzen
-echo -e "\n${CYAN}[3/4] Dateiberechtigungen setzen...${NC}"
+echo -e "\n${CYAN}[3/5] Dateiberechtigungen setzen...${NC}"
 chmod +x "$SCRIPT_DIR/app.py" "$SCRIPT_DIR/cachyos_center.py"
 [ -f "$SCRIPT_DIR/run.sh" ] && chmod +x "$SCRIPT_DIR/run.sh"
 [ -d "$SCRIPT_DIR/bin" ] && chmod +x "$SCRIPT_DIR"/bin/*.py 2>/dev/null || true
 echo -e "${GREEN}[✓] Alle Skripte sind nun ausführbar.${NC}"
 
-# 4. Verifikation
-echo -e "\n${CYAN}[4/4] Funktions-Test (Smoke-Test)...${NC}"
+# 4. System- & Desktop-Integration
+echo -e "\n${CYAN}[4/5] Desktop- & CLI-Integration einrichten...${NC}"
+mkdir -p "$HOME/.local/bin" "$HOME/.local/share/applications" "$HOME/.local/share/icons/hicolor/scalable/apps"
+
+# CLI Symlink
+ln -sf "$SCRIPT_DIR/run.sh" "$HOME/.local/bin/cachyos-control-center"
+echo -e "${GREEN}[✓] CLI-Befehl 'cachyos-control-center' in ~/.local/bin/ registriert.${NC}"
+
+# Desktop Entry & Icon
+if [ -f "$SCRIPT_DIR/data/cachyos-control-center.desktop" ]; then
+    cp -f "$SCRIPT_DIR/data/cachyos-control-center.desktop" "$HOME/.local/share/applications/cachyos-control-center.desktop"
+    chmod +x "$HOME/.local/share/applications/cachyos-control-center.desktop"
+    echo -e "${GREEN}[✓] Desktop-Starter in ~/.local/share/applications/ installiert.${NC}"
+fi
+
+if [ -f "$SCRIPT_DIR/data/cachyos-control-center.svg" ]; then
+    cp -f "$SCRIPT_DIR/data/cachyos-control-center.svg" "$HOME/.local/share/icons/hicolor/scalable/apps/cachyos-control-center.svg"
+    echo -e "${GREEN}[✓] Anwendungs-Icon installiert.${NC}"
+fi
+
+if command -v update-desktop-database &>/dev/null; then
+    update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
+fi
+
+# 5. Verifikation
+echo -e "\n${CYAN}[5/5] Funktions-Test (Smoke-Test)...${NC}"
 if python3 "$SCRIPT_DIR/app.py" --version &>/dev/null; then
     VERSION_OUTPUT=$(python3 "$SCRIPT_DIR/app.py" --version 2>&1)
     echo -e "${GREEN}[✓] Erfolgreich initialisiert: ${VERSION_OUTPUT}${NC}"
@@ -101,5 +125,8 @@ fi
 echo -e "\n${GREEN}${BOLD}====================================================================${NC}"
 echo -e "${GREEN}${BOLD}   Setup erfolgreich abgeschlossen! 🚀                              ${NC}"
 echo -e "${GREEN}${BOLD}====================================================================${NC}"
-echo -e "Starte das Kontrollzentrum mit:"
-echo -e "  ${CYAN}./run.sh${NC}  oder  ${CYAN}python3 app.py${NC}\n"
+echo -e "Starte das Kontrollzentrum bequem über:"
+echo -e "  • Terminal:       ${CYAN}cachyos-control-center${NC}  oder  ${CYAN}./run.sh${NC}"
+echo -e "  • Startmenü:      ${CYAN}CachyOS Control Center${NC} (KDE / KRunner)"
+echo -e "  • Direktaufruf:   ${CYAN}python3 app.py${NC}\n"
+sleep 0.1

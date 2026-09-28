@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import sys
 from pathlib import Path
 
@@ -147,7 +148,7 @@ Beispiele:
     parser.add_argument("--json", action="store_true", help="Gibt einen vollständigen Systemaudit als JSON aus")
     parser.add_argument("--diag", choices=["quick", "standard", "deep"], help="Führt eine direkte CLI-Netzwerkdiagnose durch")
     parser.add_argument("--lang", choices=["de", "en"], help="Setzt die bevorzugte Sprache (de_DE oder en_US)")
-    parser.add_argument("--version", action="version", version="CachyOS Control Center 1.0.0 (Unified 2026 Edition)")
+    parser.add_argument("--version", action="version", version="CachyOS Control Center 1.1.0 (Unified 2026 Edition)")
 
     args = parser.parse_args()
 
@@ -173,6 +174,13 @@ Beispiele:
     elif args.diag:
         sys.exit(handle_cli_diag(args.diag))
     else:
+        # Falls TUI ohne interaktives Terminal aufgerufen wurde, Terminal öffnen
+        if not sys.stdin.isatty():
+            for term in ["konsole", "alacritty", "kitty", "ptyxis", "xfce4-terminal", "gnome-terminal", "xterm"]:
+                if shutil.which(term):
+                    launcher = BASE_DIR / "run.sh"
+                    if launcher.exists():
+                        os.execvp(term, [term, "-e", str(launcher)])
         # TUI App starten
         from cachyos_center import CachyOSCenterApp
         app = CachyOSCenterApp()

@@ -13,27 +13,37 @@ from __future__ import annotations
 import os
 import platform
 import re
+import shlex
 import shutil
 import subprocess
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Union
 
 
-def run_cmd(cmd: str, timeout: int = 20) -> Tuple[str, str, int]:
+def run_cmd(cmd: Union[str, List[str]], timeout: int = 20) -> Tuple[str, str, int]:
     """
-    Führt Shell-Befehle sicher mit Timeout und Exit-Code-Rückgabe aus.
-    Erkennt automatisch bestehende Root-Rechte (entfernt pkexec) und fängt
-    Timeouts sowie Berechtigungsfehler defensiv ab.
+    Führt Systembefehle sicher mit Timeout und Exit-Code-Rückgabe aus.
+    Verwendet strikt shell=False und tokenisierte Argumentlisten.
+    Erkennt automatisch bestehende Root-Rechte (entfernt überflüssiges pkexec)
+    und fängt Timeouts sowie Berechtigungsfehler defensiv ab.
     """
-    if os.geteuid() == 0 and cmd.startswith("pkexec "):
-        cmd = cmd[7:].strip()
+    if isinstance(cmd, str):
+        args = shlex.split(cmd)
+    else:
+        args = [str(a) for a in cmd]
+
+    if not args:
+        return "", "Leerer Befehl übergeben.", 1
+
+    if os.geteuid() == 0 and args[0] == "pkexec":
+        args = args[1:]
 
     try:
         res = subprocess.run(
-            cmd,
-            shell=True,
+            args,
+            shell=False,
             text=True,
             capture_output=True,
             timeout=timeout,

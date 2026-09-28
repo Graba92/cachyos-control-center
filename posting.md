@@ -4,7 +4,11 @@
 
 ---
 
-### 🌟 Highlights & Features
+### 🌟 Highlights & Features (v1.1.0)
+- **🚀 Sofortstart & Asynchrone Architektur:** Nicht-blockierendes Laden aller Wartungs-, Paket- und Update-Telemetrien via Worker-Threads.
+- **🖥️ Intelligenter Auto-Terminal Launcher:** Startet per Doppelklick in KDE Plasma / Dolphin oder KRunner automatisch im Lieblings-Terminal (Konsole, Alacritty, Kitty).
+- **⏱️ Systemd Hintergrund-Timer:** Statusüberwachung und 1-Klick Aktivierung automatisierter Wartungstimer (`fstrim.timer`, `paccache.timer`).
+- **🛡️ Gehärtete Befehlssicherheit:** Strikt isolierte Polkit-Aktionen mit tokenisierten Befehlslisten gegen Shell-Injection.
 - **🌐 Dual-Language Support (DE & EN):** Nahtloses Umschalten der Benutzeroberfläche zur Laufzeit (Taste `L` oder `--lang de|en`).
 - **⚡ Echtzeit-Telemetrie:** CPU-, GPU-, RAM- und NVMe/BTRFS-Metriken im Sekundentakt ohne spürbaren Overhead.
 - **🐧 Kernel- & Treibermatrix:** Erkennung und Verwaltung von CachyOS-Kerneln (BORE, LTO, RT, BMQ) und NVIDIA-/AMD-Grafiktreibern.

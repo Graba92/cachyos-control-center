@@ -11,12 +11,14 @@
 
 from __future__ import annotations
 
+import glob
 import os
+import shlex
 import shutil
 import subprocess
 import time
 from pathlib import Path
-from typing import Tuple
+from typing import List, Optional, Tuple, Union
 
 from .i18n import t
 
@@ -29,29 +31,45 @@ def is_pacman_locked() -> bool:
     return PACMAN_LOCK_FILE.exists()
 
 
-def run_polkit_cmd(cmd: str, timeout: int = 45, check_pacman_lock: bool = False) -> Tuple[bool, str, int]:
+def run_polkit_cmd(
+    cmd: Union[str, List[str]],
+    timeout: int = 45,
+    check_pacman_lock: bool = False,
+    input_data: Optional[str] = None,
+) -> Tuple[bool, str, int]:
     """
     Führt einen administrativen Befehl defensiv mit pkexec aus.
+    Verwendet strikt shell=False und tokenisierte Argumentlisten,
+    um Command-Injection in den Root-Bereich absolut auszuschließen.
     Rückgabe: (erfolgreich: bool, ausgabe/fehlermeldung: str, returncode: int)
     """
     # Wenn Pacman-Befehl und db.lck existiert, sofort warnen
     if check_pacman_lock and is_pacman_locked():
         return False, t("db_lock_warn"), 1
 
+    # Argumente als Liste sicherstellen (kein shell=True)
+    if isinstance(cmd, str):
+        args = shlex.split(cmd)
+    else:
+        args = [str(a) for a in cmd]
+
+    if not args:
+        return False, "Leerer Befehl übergeben.", 1
+
     # Wenn bereits Root (z. B. CLI als sudo), kein pkexec voranstellen
     if os.geteuid() == 0:
-        actual_cmd = cmd
+        full_cmd = args
     else:
-        # Prüfen ob pkexec verfügbar ist
         if not shutil.which("pkexec"):
             return False, "Fehler: 'pkexec' ist nicht installiert oder im PATH nicht verfügbar.", 127
-        actual_cmd = f"pkexec {cmd}"
+        full_cmd = ["pkexec"] + args
 
     try:
         res = subprocess.run(
-            actual_cmd,
-            shell=True,
+            full_cmd,
+            shell=False,
             text=True,
+            input=input_data,
             capture_output=True,
             timeout=timeout,
         )
@@ -81,12 +99,12 @@ def polkit_clean_cache(keep_versions: int = 2) -> Tuple[bool, str]:
         return False, t("db_lock_warn")
 
     if shutil.which("paccache"):
-        cmd = f"paccache -r -k {keep_versions}"
+        cmd = ["paccache", "-r", "-k", str(int(keep_versions))]
         ok, msg, _ = run_polkit_cmd(cmd, timeout=30, check_pacman_lock=True)
         if ok:
             return True, f"Pacman Cache erfolgreich bereinigt (k={keep_versions}):\n{msg}"
-    
-    cmd = "pacman -Sc --noconfirm"
+
+    cmd = ["pacman", "-Sc", "--noconfirm"]
     ok, msg, _ = run_polkit_cmd(cmd, timeout=30, check_pacman_lock=True)
     return ok, msg
 
@@ -99,13 +117,12 @@ def polkit_remove_orphans(orphan_list: list[str]) -> Tuple[bool, str]:
     if is_pacman_locked():
         return False, t("db_lock_warn")
 
-    safe_pkgs = " ".join([shutil.which(p) or p for p in orphan_list])
-    # Nur Paketnamen ohne Sonderzeichen
-    clean_pkgs = " ".join([p.strip() for p in orphan_list if p.strip().replace("-", "").replace("_", "").replace(".", "").isalnum()])
+    # Nur saubere Paketnamen ohne Sonderzeichen erlauben
+    clean_pkgs = [p.strip() for p in orphan_list if p.strip().replace("-", "").replace("_", "").replace(".", "").isalnum()]
     if not clean_pkgs:
         return False, "Keine gültigen Paketnamen zum Entfernen angegeben."
 
-    cmd = f"pacman -Rns --noconfirm {clean_pkgs}"
+    cmd = ["pacman", "-Rns", "--noconfirm"] + clean_pkgs
     ok, msg, _ = run_polkit_cmd(cmd, timeout=60, check_pacman_lock=True)
     return ok, msg
 
@@ -124,32 +141,45 @@ def polkit_service_action(service_name: str, action: str) -> Tuple[bool, str]:
     if not clean_srv.replace(".", "").replace("-", "").replace("@", "").replace("_", "").isalnum():
         return False, f"Ungültiger Service-Name: {service_name}"
 
-    cmd = f"systemctl {action} {clean_srv}"
+    cmd = ["systemctl", action, clean_srv]
     ok, msg, _ = run_polkit_cmd(cmd, timeout=20)
     return ok, msg
 
 
 def polkit_set_cpu_governor(governor: str) -> Tuple[bool, str]:
-    """Setzt den CPU Governor für alle Kerne."""
+    """
+    Setzt den CPU Governor für alle Kerne.
+    Nutzt 'tee' ohne Shell-Interpolation (kein sh -c / shell=True).
+    """
     clean_gov = governor.strip()
     if not clean_gov.replace("_", "").isalnum():
         return False, f"Ungültiger Governor: {governor}"
 
-    # Bash-Befehl zum Schreiben auf alle Cores
-    cmd = f'sh -c "for g in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do echo {clean_gov} > \\$g 2>/dev/null; done"'
-    ok, msg, _ = run_polkit_cmd(cmd, timeout=10)
-    return ok, msg
+    paths = sorted(glob.glob("/sys/devices/system/cpu/cpu*/cpufreq/scaling_governor"))
+    if not paths:
+        return False, "Keine CPU cpufreq scaling_governor Schnittstellen gefunden."
+
+    cmd = ["tee"] + paths
+    ok, msg, _ = run_polkit_cmd(cmd, timeout=10, input_data=f"{clean_gov}\n")
+    return ok, f"Governor '{clean_gov}' für {len(paths)} Kerne gesetzt." if ok else msg
 
 
 def polkit_set_epp_preference(preference: str) -> Tuple[bool, str]:
-    """Setzt das Energy Performance Preference (EPP) Profil für alle Cores."""
+    """
+    Setzt das Energy Performance Preference (EPP) Profil für alle Cores.
+    Nutzt 'tee' ohne Shell-Interpolation (kein sh -c / shell=True).
+    """
     clean_pref = preference.strip()
     if not clean_pref.replace("_", "").isalnum():
         return False, f"Ungültige EPP-Präferenz: {preference}"
 
-    cmd = f'sh -c "for e in /sys/devices/system/cpu/cpu*/cpufreq/energy_performance_preference; do echo {clean_pref} > \\$e 2>/dev/null; done"'
-    ok, msg, _ = run_polkit_cmd(cmd, timeout=10)
-    return ok, msg
+    paths = sorted(glob.glob("/sys/devices/system/cpu/cpu*/cpufreq/energy_performance_preference"))
+    if not paths:
+        return False, "Keine CPU EPP Schnittstellen gefunden."
+
+    cmd = ["tee"] + paths
+    ok, msg, _ = run_polkit_cmd(cmd, timeout=10, input_data=f"{clean_pref}\n")
+    return ok, f"EPP '{clean_pref}' für {len(paths)} Kerne gesetzt." if ok else msg
 
 
 def polkit_run_mirror_bench() -> Tuple[bool, str]:
@@ -158,12 +188,13 @@ def polkit_run_mirror_bench() -> Tuple[bool, str]:
         return False, t("db_lock_warn")
 
     if shutil.which("cachyos-rate-mirrors"):
-        cmd = "cachyos-rate-mirrors"
+        cmd = ["cachyos-rate-mirrors"]
         ok, msg, _ = run_polkit_cmd(cmd, timeout=120, check_pacman_lock=True)
         return ok, msg
     elif shutil.which("rate-mirrors"):
-        cmd = "rate-mirrors --save=/etc/pacman.d/cachyos-mirrorlist cachyos"
+        cmd = ["rate-mirrors", "--save=/etc/pacman.d/cachyos-mirrorlist", "cachyos"]
         ok, msg, _ = run_polkit_cmd(cmd, timeout=120, check_pacman_lock=True)
         return ok, msg
     else:
         return False, "Weder 'cachyos-rate-mirrors' noch 'rate-mirrors' gefunden. Bitte installieren mit: sudo pacman -S cachyos-rate-mirrors"
+
